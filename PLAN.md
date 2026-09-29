@@ -291,11 +291,11 @@ Each item must pass on the deployed app. The format is **Given / When / Then**, 
 ---
 
 ## 8. Milestones
-Each milestone ends deployed and demoable.
+Each milestone ends tested locally and demoable. We deploy a Vercel preview once after M3 to check serverless time limits for video jobs, and launch to production in M9.
 
 | # | Milestone | Features | Exit check |
 |---|---|---|---|
-| M1 | Foundations | Scaffold, theme, Supabase schema + RLS + credit functions, F2, app shell, `/privacy` + `/terms`, Vercel deploy, publish Google sign-in | Sign in and see 50 credits |
+| M1 | Foundations | Scaffold, theme, Supabase schema + RLS + credit functions, F2, app shell, `/privacy` + `/terms` | Sign in locally and see 50 credits ✅ |
 | M2 | Image pipeline | Job system, F3, F4 | AC3.x, AC4.x pass |
 | M3 | Video | F5, sweeper cron | AC5.x pass, including refreshing mid-job |
 | M4 | Voice | F6, F7 | AC6.x, AC7.x pass |
@@ -303,7 +303,7 @@ Each milestone ends deployed and demoable.
 | M6 | Creative boosters | F8 (seed presets and thumbnails), F9 | AC8.x, AC9.x pass |
 | M7 | Money | F13 | AC13.x pass, including replaying webhooks and parallel spending |
 | M8 | Community | F12 | AC12.x pass |
-| M9 | Front door & polish | F1, F14, F15, README | Every AC in §6 passes on production |
+| M9 | Front door, polish & launch | F1, F14, F15, README, Vercel production deploy, Supabase/Google production URLs, publish Google sign-in (AC2.6) | Every AC in §6 passes on production |
 
 The core product (create, see and reuse) works end to end by M5. After that, each milestone adds a feature without reworking earlier ones.
 
