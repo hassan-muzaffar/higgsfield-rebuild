@@ -75,8 +75,15 @@ function findImage(steps: OutputStep[] | undefined) {
 }
 
 function toProviderError(error: unknown) {
-  const status = (error as { status?: number }).status;
-  const message = error instanceof Error ? error.message : String(error);
+  const { status, body } = error as { status?: number; body?: unknown };
+  // The SDK's own message hides the provider's explanation; the raw body has it.
+  const message = [error instanceof Error ? error.message : String(error), typeof body === "string" ? body : ""]
+    .filter(Boolean)
+    .join(" | ");
+  if (status === 401 || status === 402 || status === 403) {
+    // Billing, quota or key problems are on our side, not the user's.
+    return new ProviderError("Image generation is temporarily unavailable. Your credits were refunded.", message);
+  }
   if (status === 429) {
     return new ProviderError("The image service is busy right now. Your credits were refunded, so please try again in a minute.", message);
   }
