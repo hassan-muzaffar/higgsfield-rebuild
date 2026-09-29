@@ -28,12 +28,39 @@ type ImageRequest = {
   reference?: { data: Buffer; mimeType: string };
 };
 
+// Short or ambiguous prompts ("x") are sometimes answered in text ("X is a social network…").
+// This keeps the model in image mode; a text-only reply is still retried once below.
+const IMAGE_SYSTEM_INSTRUCTION =
+  "You are an image generator. Always respond with a single image that depicts the user's prompt, " +
+  "interpreting it visually even if it is short or ambiguous. Never respond with text.";
+
 /** Generates (or edits) one image. Returns JPEG bytes. */
-export async function generateImage({ prompt, aspectRatio, reference }: ImageRequest) {
+export async function generateImage(request: ImageRequest) {
+  const first = await requestImage(request);
+  if (first.image) return first.image;
+  if (first.textOnly) {
+    const second = await requestImage(request);
+    if (second.image) return second.image;
+    if (second.textOnly) {
+      throw new ProviderError(
+        "Couldn't turn that prompt into an image. Try describing what you want to see in more detail. Your credits were refunded.",
+        `text-only reply: ${second.detail}`,
+      );
+    }
+    first.detail = second.detail;
+  }
+  if (/safety|block|prohibit|policy/i.test(first.detail)) {
+    throw new ProviderError("Blocked by the safety filter. Try rephrasing your prompt. Your credits were refunded.", first.detail);
+  }
+  throw new ProviderError("The image couldn't be generated. Your credits were refunded.", first.detail);
+}
+
+async function requestImage({ prompt, aspectRatio, reference }: ImageRequest) {
   let interaction;
   try {
     interaction = await google().interactions.create({
       model: MODELS.image,
+      system_instruction: IMAGE_SYSTEM_INSTRUCTION,
       input: reference
         ? [
             { type: "text", text: prompt },
@@ -50,17 +77,16 @@ export async function generateImage({ prompt, aspectRatio, reference }: ImageReq
 
   const image = interaction.output_image ?? findImage(interaction.steps);
   if (interaction.status === "completed" && image?.data) {
-    return { data: Buffer.from(image.data, "base64"), mimeType: image.mime_type ?? "image/jpeg" };
+    return { image: { data: Buffer.from(image.data, "base64"), mimeType: image.mime_type ?? "image/jpeg" } };
   }
 
-  const detail = [interaction.status, ...(interaction.errors ?? []).map((e) => `${e.code}: ${e.message}`)].join(" ");
-  if (/safety|block|prohibit|policy/i.test(detail) || (interaction.status === "completed" && !image)) {
-    throw new ProviderError(
-      "Blocked by the safety filter. Try rephrasing your prompt. Your credits were refunded.",
-      detail,
-    );
-  }
-  throw new ProviderError("The image couldn't be generated. Your credits were refunded.", detail);
+  const errors = (interaction.errors ?? []).map((e) => `${e.code}: ${e.message}`);
+  return {
+    image: null,
+    // Completed with a text answer and no errors: the model misread the prompt rather than refusing it.
+    textOnly: interaction.status === "completed" && !errors.length && Boolean(interaction.output_text),
+    detail: [interaction.status, ...errors, interaction.output_text?.slice(0, 200)].filter(Boolean).join(" | "),
+  };
 }
 
 type OutputStep = { type: string; content?: Array<{ type: string; data?: string; mime_type?: string }> };
