@@ -1,7 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangleIcon, CopyIcon, DownloadIcon, Loader2Icon, PlayIcon, RotateCcwIcon, XIcon } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  AudioLinesIcon,
+  CopyIcon,
+  DownloadIcon,
+  Loader2Icon,
+  PauseIcon,
+  PlayIcon,
+  RotateCcwIcon,
+  XIcon,
+} from "lucide-react";
+import { VOICES } from "@/lib/generations/config";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Generation } from "@/lib/generations/types";
@@ -16,7 +27,9 @@ type Props = {
   onDownload: (g: Generation) => void;
 };
 
-function aspectStyle(ratio?: string) {
+function aspectStyle(g: Generation) {
+  if (g.kind === "voice") return { aspectRatio: "1 / 1" };
+  const ratio = g.params.aspectRatio;
   const [w, h] = (ratio ?? "1:1").split(":").map(Number);
   return { aspectRatio: w && h ? `${w} / ${h}` : "1 / 1" };
 }
@@ -27,7 +40,7 @@ export function GenerationCard({ generation: g, mediaUrl, onRetry, onDismiss, on
   return (
     <figure
       className="group relative overflow-hidden rounded-xl border bg-card"
-      style={aspectStyle(g.params.aspectRatio)}
+      style={aspectStyle(g)}
     >
       {pending && <PendingState createdAt={g.created_at} kind={g.kind} />}
 
@@ -47,7 +60,12 @@ export function GenerationCard({ generation: g, mediaUrl, onRetry, onDismiss, on
         </div>
       )}
 
+      {g.status === "succeeded" && g.kind === "voice" && (
+        <VoiceResult generation={g} src={mediaUrl} onUsePrompt={onUsePrompt} onDownload={onDownload} />
+      )}
+
       {g.status === "succeeded" &&
+        g.kind !== "voice" &&
         (!mediaUrl ? (
           <div className="size-full animate-pulse bg-muted" />
         ) : g.kind === "video" ? (
@@ -64,7 +82,7 @@ export function GenerationCard({ generation: g, mediaUrl, onRetry, onDismiss, on
         </span>
       )}
 
-      {g.status === "succeeded" && (
+      {g.status === "succeeded" && g.kind !== "voice" && (
         <figcaption className="absolute inset-x-0 bottom-0 flex items-end gap-2 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
           <p className="line-clamp-2 flex-1 text-xs text-white/90">{g.prompt}</p>
           <CardAction label="Use this prompt" onClick={() => onUsePrompt(g.prompt)}>
@@ -89,6 +107,89 @@ function CardAction({ label, onClick, children }: { label: string; onClick: () =
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
+  );
+}
+
+function formatTime(s: number) {
+  if (!Number.isFinite(s)) return "0:00";
+  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+}
+
+function VoiceResult({
+  generation: g,
+  src,
+  onUsePrompt,
+  onDownload,
+}: {
+  generation: Generation;
+  src?: string;
+  onUsePrompt: (prompt: string) => void;
+  onDownload: (g: Generation) => void;
+}) {
+  const audio = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [time, setTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const voiceLabel = VOICES.find((v) => v.id === g.params.voice)?.label ?? "Voice";
+
+  return (
+    <div className="flex h-full flex-col bg-gradient-to-br from-primary/15 via-card to-card p-4">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <AudioLinesIcon className="size-4 text-primary" aria-hidden="true" />
+        <span className="font-medium text-foreground">{voiceLabel}</span>
+        <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] tracking-wide uppercase">AI voice</span>
+      </div>
+
+      <p className="mt-3 line-clamp-4 flex-1 text-sm text-pretty text-muted-foreground">“{g.prompt}”</p>
+
+      {src && (
+        <audio
+          ref={audio}
+          src={src}
+          preload="metadata"
+          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+          onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onEnded={() => setPlaying(false)}
+        />
+      )}
+
+      <div className="mt-3 flex items-center gap-3">
+        <Button
+          size="icon"
+          className="shrink-0 rounded-full"
+          disabled={!src}
+          aria-label={playing ? "Pause" : "Play"}
+          onClick={() => (playing ? audio.current?.pause() : audio.current?.play())}
+        >
+          {playing ? <PauseIcon className="fill-current" aria-hidden="true" /> : <PlayIcon className="fill-current" aria-hidden="true" />}
+        </Button>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <input
+            type="range"
+            min={0}
+            max={duration || 0}
+            step={0.1}
+            value={time}
+            onChange={(e) => {
+              if (audio.current) audio.current.currentTime = Number(e.target.value);
+            }}
+            aria-label="Seek"
+            className="h-1 w-full cursor-pointer accent-primary"
+          />
+          <span className="text-[11px] text-muted-foreground tabular-nums">
+            {formatTime(time)} / {formatTime(duration)}
+          </span>
+        </div>
+        <CardAction label="Use this script" onClick={() => onUsePrompt(g.prompt)}>
+          <CopyIcon aria-hidden="true" />
+        </CardAction>
+        <CardAction label="Download" onClick={() => onDownload(g)}>
+          <DownloadIcon aria-hidden="true" />
+        </CardAction>
+      </div>
+    </div>
   );
 }
 
@@ -136,7 +237,7 @@ function PendingState({ createdAt, kind }: { createdAt: string; kind: Generation
       />
       <Loader2Icon className="size-5 animate-spin text-primary" aria-hidden="true" />
       <p className="text-xs text-muted-foreground" role="status">
-        {kind === "video" ? "Generating video…" : "Generating…"} <span className="tabular-nums">{elapsed}</span>
+        {kind === "video" ? "Generating video…" : kind === "voice" ? "Recording voiceover…" : "Generating…"} <span className="tabular-nums">{elapsed}</span>
       </p>
       {kind === "video" && (
         <p className="text-[11px] text-muted-foreground/70">Usually 1–3 minutes. You can leave this page.</p>

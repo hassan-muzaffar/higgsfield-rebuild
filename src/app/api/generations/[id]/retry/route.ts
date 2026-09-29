@@ -8,13 +8,19 @@ import {
   type ImageAspectRatio,
   type VideoAspectRatio,
   type VideoDuration,
+  VOICE_IDS,
+  VOICE_STYLE_IDS,
+  type VoiceId,
+  type VoiceStyleId,
 } from "@/lib/generations/config";
 import {
   createImageJobs,
   createVideoJob,
+  createVoiceJob,
   GenerationRequestError,
   runImageJob,
   runVideoJob,
+  runVoiceJob,
 } from "@/lib/generations/server";
 import { GENERATION_COLUMNS, type Generation } from "@/lib/generations/types";
 
@@ -39,8 +45,8 @@ export async function POST(_request: Request, ctx: RouteContext<"/api/generation
     .maybeSingle<Generation>();
 
   if (!failed) return NextResponse.json({ error: "Not found." }, { status: 404 });
-  if (failed.status !== "failed" || failed.kind === "voice") {
-    return NextResponse.json({ error: "Only failed images and videos can be retried." }, { status: 409 });
+  if (failed.status !== "failed") {
+    return NextResponse.json({ error: "Only failed generations can be retried." }, { status: 409 });
   }
 
   try {
@@ -57,6 +63,12 @@ export async function POST(_request: Request, ctx: RouteContext<"/api/generation
         count: 1,
         referencePath: failed.input_paths[0],
       });
+    } else if (failed.kind === "voice") {
+      job = await createVoiceJob({
+        ...common,
+        voice: pick<VoiceId>(failed.params.voice, VOICE_IDS, "marin"),
+        style: pick<VoiceStyleId>(failed.params.style, VOICE_STYLE_IDS, "natural"),
+      });
     } else {
       job = await createVideoJob({
         ...common,
@@ -68,7 +80,11 @@ export async function POST(_request: Request, ctx: RouteContext<"/api/generation
 
     await createAdminClient().from("generations").delete().eq("id", failed.id);
     after(() =>
-      job.kind === "video" ? runVideoJob(job.id, startedAt + (maxDuration - 20) * 1000) : runImageJob(job.id),
+      job.kind === "video"
+        ? runVideoJob(job.id, startedAt + (maxDuration - 20) * 1000)
+        : job.kind === "voice"
+          ? runVoiceJob(job.id)
+          : runImageJob(job.id),
     );
     return NextResponse.json({ generation: job, replaced: failed.id }, { status: 202 });
   } catch (error) {

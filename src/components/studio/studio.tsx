@@ -7,8 +7,8 @@ import { GenerationCard } from "@/components/studio/generation-card";
 import { PromptBar, type Submission } from "@/components/studio/prompt-bar";
 import { useSignedUrls } from "@/components/studio/use-signed-urls";
 import { adjustCredits, useCredits } from "@/lib/credits-store";
-import { imageCost, videoCost } from "@/lib/generations/config";
-import type { Generation } from "@/lib/generations/types";
+import { imageCost, videoCost, voiceCost } from "@/lib/generations/config";
+import type { Generation, GenerationMode } from "@/lib/generations/types";
 import { createClient } from "@/lib/supabase/client";
 
 const EXAMPLE_PROMPTS = [
@@ -18,6 +18,33 @@ const EXAMPLE_PROMPTS = [
 ];
 
 type Props = { userId: string; initialCredits: number; initialGenerations: Generation[] };
+
+/** What a submission will create and cost, for placeholder cards and the optimistic balance. */
+function describe(s: Submission): { count: number; cost: number; mode: GenerationMode; params: Generation["params"] } {
+  switch (s.kind) {
+    case "image":
+      return {
+        count: s.count,
+        cost: imageCost(s.count),
+        mode: s.referencePath ? "edit" : "text",
+        params: { aspectRatio: s.aspectRatio },
+      };
+    case "video":
+      return {
+        count: 1,
+        cost: videoCost(s.durationSeconds),
+        mode: s.startFramePath ? "image_to_video" : "text",
+        params: { aspectRatio: s.aspectRatio, durationSeconds: s.durationSeconds },
+      };
+    case "voice":
+      return {
+        count: 1,
+        cost: voiceCost(s.prompt.length),
+        mode: "tts",
+        params: { voice: s.voice, style: s.style, characters: s.prompt.length },
+      };
+  }
+}
 
 function sortNewestFirst(list: Generation[]) {
   return [...list].sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -87,29 +114,19 @@ export function Studio({ userId, initialCredits, initialGenerations }: Props) {
   const urls = useSignedUrls(outputPaths);
 
   async function generate(submission: Submission) {
-    const isVideo = submission.kind === "video";
-    const count = isVideo ? 1 : submission.count;
-    const cost = isVideo ? videoCost(submission.durationSeconds) : imageCost(submission.count);
+    const { count, cost, mode, params } = describe(submission);
     // Show placeholder cards immediately; swap them for the real jobs when the server replies.
     const now = new Date().toISOString();
     const temps: Generation[] = Array.from({ length: count }, () => ({
       id: `temp-${crypto.randomUUID()}`,
       user_id: userId,
       kind: submission.kind,
-      mode: isVideo
-        ? submission.startFramePath
-          ? "image_to_video"
-          : "text"
-        : submission.referencePath
-          ? "edit"
-          : "text",
+      mode,
       model: "",
       prompt: submission.prompt,
       final_prompt: submission.prompt,
       preset_id: null,
-      params: isVideo
-        ? { aspectRatio: submission.aspectRatio, durationSeconds: submission.durationSeconds }
-        : { aspectRatio: submission.aspectRatio },
+      params,
       input_paths: [],
       output_paths: [],
       status: "queued",
@@ -175,7 +192,7 @@ export function Studio({ userId, initialCredits, initialGenerations }: Props) {
     if (!path) return;
     const { data, error } = await createClient()
       .storage.from("outputs")
-      .createSignedUrl(path, 60, { download: `oneshot-${g.id.slice(0, 8)}.${g.kind === "video" ? "mp4" : "jpg"}` });
+      .createSignedUrl(path, 60, { download: `oneshot-${g.id.slice(0, 8)}.${path.split(".").pop()}` });
     if (error || !data) {
       toast.error("Couldn't start the download. Please try again.");
       return;
@@ -197,7 +214,7 @@ export function Studio({ userId, initialCredits, initialGenerations }: Props) {
           </div>
           <h1 className="text-xl font-semibold">What will you create first?</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Describe an image or a video below, or start from one of these.
+            Describe an image or a video, write a voiceover script, or start from one of these.
           </p>
           <div className="mt-6 grid w-full max-w-3xl gap-3 sm:grid-cols-3">
             {EXAMPLE_PROMPTS.map((example) => (

@@ -12,7 +12,13 @@ export type Generation = {
   prompt: string;
   final_prompt: string;
   preset_id: string | null;
-  params: { aspectRatio?: string; durationSeconds?: number } & Record<string, unknown>;
+  params: {
+    aspectRatio?: string;
+    durationSeconds?: number;
+    voice?: string;
+    style?: string;
+    characters?: number;
+  } & Record<string, unknown>;
   input_paths: string[];
   output_paths: string[];
   status: GenerationStatus;

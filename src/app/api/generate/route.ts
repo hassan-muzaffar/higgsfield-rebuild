@@ -7,13 +7,18 @@ import {
   MAX_PROMPT_LENGTH,
   VIDEO_ASPECT_RATIOS,
   VIDEO_DURATIONS,
+  MAX_VOICE_CHARACTERS,
+  VOICE_IDS,
+  VOICE_STYLE_IDS,
 } from "@/lib/generations/config";
 import {
   createImageJobs,
   createVideoJob,
+  createVoiceJob,
   GenerationRequestError,
   runImageJob,
   runVideoJob,
+  runVoiceJob,
 } from "@/lib/generations/server";
 
 // Jobs run in `after()`, which lives as long as this route's max duration (the Vercel Hobby maximum).
@@ -39,6 +44,13 @@ const generateRequest = z.discriminatedUnion("kind", [
     startFramePath: inputPath,
     parentId: z.uuid().optional(),
   }),
+  z.object({
+    kind: z.literal("voice"),
+    prompt: z.string().trim().min(1, "Write the script first.").max(MAX_VOICE_CHARACTERS),
+    voice: z.enum(VOICE_IDS),
+    style: z.enum(VOICE_STYLE_IDS),
+    parentId: z.uuid().optional(),
+  }),
 ]);
 
 export async function POST(request: Request) {
@@ -57,6 +69,12 @@ export async function POST(request: Request) {
       const jobs = await createImageJobs({ userId, ...data });
       after(() => Promise.all(jobs.map((job) => runImageJob(job.id))));
       return NextResponse.json({ generations: jobs }, { status: 202 });
+    }
+
+    if (data.kind === "voice") {
+      const job = await createVoiceJob({ userId, ...data });
+      after(() => runVoiceJob(job.id));
+      return NextResponse.json({ generations: [job] }, { status: 202 });
     }
 
     const job = await createVideoJob({ userId, ...data });

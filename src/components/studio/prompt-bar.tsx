@@ -10,8 +10,11 @@ import {
   ImageIcon,
   ImagePlusIcon,
   Loader2Icon,
+  PlayIcon,
+  SquareIcon,
   XIcon,
 } from "lucide-react";
+import { DictationButton } from "@/components/studio/dictation-button";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -34,7 +37,13 @@ import {
   VIDEO_ASPECT_RATIOS,
   VIDEO_DURATIONS,
   videoCost,
+  MAX_VOICE_CHARACTERS,
+  VOICE_STYLES,
+  VOICES,
+  voiceCost,
   type ImageAspectRatio,
+  type VoiceId,
+  type VoiceStyleId,
   type VideoAspectRatio,
   type VideoDuration,
 } from "@/lib/generations/config";
@@ -49,9 +58,10 @@ export type Submission =
       aspectRatio: VideoAspectRatio;
       durationSeconds: VideoDuration;
       startFramePath?: string;
-    };
+    }
+  | { kind: "voice"; prompt: string; voice: VoiceId; style: VoiceStyleId };
 
-export type Mode = "image" | "video";
+export type Mode = "image" | "video" | "voice";
 
 type Reference = { path: string | null; previewUrl: string; uploading: boolean; type: string };
 
@@ -66,7 +76,7 @@ type Props = {
 const TABS = [
   { id: "image", label: "Image", icon: ImageIcon, ready: true },
   { id: "video", label: "Video", icon: ClapperboardIcon, ready: true },
-  { id: "voice", label: "Voice", icon: AudioLinesIcon, ready: false },
+  { id: "voice", label: "Voice", icon: AudioLinesIcon, ready: true },
 ] as const;
 
 export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }: Props) {
@@ -75,14 +85,37 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
   const [videoRatio, setVideoRatio] = useState<VideoAspectRatio>("16:9");
   const [count, setCount] = useState(1);
   const [duration, setDuration] = useState<VideoDuration>(8);
+  const [voice, setVoice] = useState<VoiceId>("marin");
+  const [style, setStyle] = useState<VoiceStyleId>("natural");
   const [reference, setReference] = useState<Reference | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const textarea = useRef<HTMLTextAreaElement>(null);
 
   const allowedTypes: readonly string[] = mode === "video" ? START_FRAME_TYPES : REFERENCE_IMAGE_TYPES;
-  const cost = mode === "video" ? videoCost(duration) : imageCost(count);
+  const maxLength = mode === "voice" ? MAX_VOICE_CHARACTERS : MAX_PROMPT_LENGTH;
+  const cost =
+    mode === "video" ? videoCost(duration) : mode === "voice" ? voiceCost(prompt.trim().length) : imageCost(count);
   const notEnoughCredits = credits < cost;
-  const canSubmit = prompt.trim().length > 0 && !notEnoughCredits && !reference?.uploading;
+  const tooLong = prompt.length > maxLength;
+  const canSubmit =
+    prompt.trim().length > 0 && !notEnoughCredits && !tooLong && (mode === "voice" || !reference?.uploading);
+
+  /** Inserts dictated text at the cursor, keeping what's already typed. */
+  function insertAtCursor(text: string) {
+    const el = textarea.current;
+    const start = el?.selectionStart ?? prompt.length;
+    const end = el?.selectionEnd ?? prompt.length;
+    const before = prompt.slice(0, start);
+    const after = prompt.slice(end);
+    const spacedText = (before && !/\s$/.test(before) ? " " : "") + text + (after && !/^\s/.test(after) ? " " : "");
+    onPromptChange(before + spacedText + after);
+    requestAnimationFrame(() => {
+      const caret = before.length + spacedText.length;
+      el?.focus();
+      el?.setSelectionRange(caret, caret);
+    });
+  }
 
   function switchMode(next: Mode) {
     setMode(next);
@@ -125,10 +158,13 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
   function submit() {
     if (!canSubmit) return;
     const path = reference?.path ?? undefined;
+    const text = prompt.trim();
     onSubmit(
-      mode === "video"
-        ? { kind: "video", prompt: prompt.trim(), aspectRatio: videoRatio, durationSeconds: duration, startFramePath: path }
-        : { kind: "image", prompt: prompt.trim(), aspectRatio: imageRatio, count, referencePath: path },
+      mode === "voice"
+        ? { kind: "voice", prompt: text, voice, style }
+        : mode === "video"
+          ? { kind: "video", prompt: text, aspectRatio: videoRatio, durationSeconds: duration, startFramePath: path }
+          : { kind: "image", prompt: text, aspectRatio: imageRatio, count, referencePath: path },
     );
   }
 
@@ -165,7 +201,7 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
       </div>
 
       <div className="flex gap-3 p-3">
-        {reference && (
+        {reference && mode !== "voice" && (
           <div className="relative size-16 shrink-0 overflow-hidden rounded-lg border">
             {/* eslint-disable-next-line @next/next/no-img-element -- local object URL preview */}
             <img src={reference.previewUrl} alt={mode === "video" ? "Start frame" : "Reference image"} className="size-full object-cover" />
@@ -184,6 +220,7 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
           </div>
         )}
         <Textarea
+          ref={textarea}
           value={prompt}
           onChange={(e) => onPromptChange(e.target.value)}
           onKeyDown={(e) => {
@@ -192,10 +229,12 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
               submit();
             }
           }}
-          maxLength={MAX_PROMPT_LENGTH}
+          maxLength={maxLength}
           rows={2}
           placeholder={
-            mode === "video"
+            mode === "voice"
+              ? "Type the script to read aloud…"
+              : mode === "video"
               ? reference
                 ? "Describe how the scene should move, e.g. “slow push-in as the waves crash”"
                 : "Describe the shot: subject, motion, camera, mood…"
@@ -226,6 +265,9 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
             e.target.value = "";
           }}
         />
+        <DictationButton onText={insertAtCursor} />
+
+        {mode !== "voice" && (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -239,8 +281,22 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
           </TooltipTrigger>
           <TooltipContent>{mode === "video" ? "Animate an image" : "Add an image to edit"}</TooltipContent>
         </Tooltip>
+        )}
 
-        {mode === "image" ? (
+        {mode === "voice" ? (
+          <>
+            <VoiceMenu value={voice} onChange={setVoice} />
+            <OptionMenu
+              label="Style"
+              value={style}
+              options={VOICE_STYLES.map((s) => ({ value: s.id, label: s.label }))}
+              onChange={setStyle}
+            />
+            <span className={cn("text-xs tabular-nums", tooLong ? "text-destructive" : "text-muted-foreground")}>
+              {prompt.length.toLocaleString()} / {MAX_VOICE_CHARACTERS.toLocaleString()}
+            </span>
+          </>
+        ) : mode === "image" ? (
           <>
             <RatioMenu value={imageRatio} options={IMAGE_ASPECT_RATIOS} onChange={setImageRatio} />
             <Segmented
@@ -281,6 +337,99 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
         </div>
       </div>
     </div>
+  );
+}
+
+function VoiceMenu({ value, onChange }: { value: VoiceId; onChange: (voice: VoiceId) => void }) {
+  const [playing, setPlaying] = useState<VoiceId | null>(null);
+  const audio = useRef<HTMLAudioElement | null>(null);
+  const current = VOICES.find((v) => v.id === value) ?? VOICES[0];
+
+  function preview(id: VoiceId) {
+    audio.current?.pause();
+    if (playing === id) {
+      setPlaying(null);
+      return;
+    }
+    const el = new Audio(`/voices/${id}.mp3`);
+    el.onended = () => setPlaying(null);
+    el.play().catch(() => setPlaying(null));
+    audio.current = el;
+    setPlaying(id);
+  }
+
+  return (
+    <DropdownMenu onOpenChange={(open) => !open && (audio.current?.pause(), setPlaying(null))}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="secondary" size="sm" aria-label={`Voice: ${current.label}`}>
+          <AudioLinesIcon aria-hidden="true" />
+          {current.label}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-64">
+        <DropdownMenuLabel>Voice · AI-generated</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={value} onValueChange={(v) => onChange(v as VoiceId)}>
+          {VOICES.map((v) => (
+            <DropdownMenuRadioItem key={v.id} value={v.id} className="pr-10">
+              <span className="flex flex-col">
+                <span>{v.label}</span>
+                <span className="text-xs text-muted-foreground">{v.description}</span>
+              </span>
+              <button
+                type="button"
+                className="absolute right-1.5 grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                aria-label={playing === v.id ? `Stop ${v.label} preview` : `Preview ${v.label}`}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  preview(v.id);
+                }}
+              >
+                {playing === v.id ? (
+                  <SquareIcon className="size-3 fill-current" aria-hidden="true" />
+                ) : (
+                  <PlayIcon className="size-3.5 fill-current" aria-hidden="true" />
+                )}
+              </button>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function OptionMenu<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+}) {
+  const current = options.find((o) => o.value === value);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="secondary" size="sm" aria-label={`${label}: ${current?.label}`}>
+          {current?.label}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuLabel>{label}</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={value} onValueChange={(v) => onChange(v as T)}>
+          {options.map((o) => (
+            <DropdownMenuRadioItem key={o.value} value={o.value}>
+              {o.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

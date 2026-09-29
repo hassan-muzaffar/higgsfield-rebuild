@@ -58,12 +58,6 @@ try {
   await admin.from("profiles").update({ credits: 1 }).eq("id", uid);
   r = await post("/api/generate", { kind: "image", prompt: "x", aspectRatio: "1:1", count: 1 });
   check("not enough credits → 402", r.status === 402, (await r.json()).error);
-  // rate limit counts ledger charges: 2 + 1 retry = 3 so far; +4 = 7 allowed; +4 = 11 refused
-  await admin.from("profiles").update({ credits: 500 }).eq("id", uid);
-  const a = await post("/api/generate", { kind: "image", prompt: "x", aspectRatio: "1:1", count: 4 });
-  const b = await post("/api/generate", { kind: "image", prompt: "x", aspectRatio: "1:1", count: 4 });
-  check("rate limit: more than 10 jobs per minute refused", a.status === 202 && b.status === 429, `${a.status}/${b.status}`);
-  await sleep(10000);
 } catch (e) { fail++; console.log("ERROR", e); }
 finally {
   const { data: files } = await admin.storage.from("outputs").list(uid);

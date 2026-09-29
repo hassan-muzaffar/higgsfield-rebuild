@@ -1,6 +1,7 @@
 import "server-only";
 import { MODELS } from "@/lib/ai/models";
 import { checkVideo, generateImage, ProviderError, startVideo } from "@/lib/ai/google";
+import { synthesizeSpeech } from "@/lib/ai/openai";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   CREDIT_COSTS,
@@ -8,6 +9,10 @@ import {
   type ImageAspectRatio,
   type VideoAspectRatio,
   type VideoDuration,
+  VOICE_STYLES,
+  voiceCost,
+  type VoiceId,
+  type VoiceStyleId,
 } from "@/lib/generations/config";
 import { GENERATION_COLUMNS, type Generation, type GenerationKind, type GenerationMode } from "@/lib/generations/types";
 
@@ -120,6 +125,26 @@ export function createVideoJob(input: {
   }).then(([job]) => job);
 }
 
+export function createVoiceJob(input: {
+  userId: string;
+  prompt: string;
+  voice: VoiceId;
+  style: VoiceStyleId;
+  parentId?: string;
+}) {
+  return createJobs({
+    userId: input.userId,
+    kind: "voice",
+    mode: "tts",
+    model: MODELS.voice,
+    prompt: input.prompt,
+    params: { voice: input.voice, style: input.style, characters: input.prompt.length },
+    costEach: voiceCost(input.prompt.length),
+    count: 1,
+    parentId: input.parentId,
+  }).then(([job]) => job);
+}
+
 /** Moves a queued job to running. Returns the job, or null if someone else already claimed it. */
 async function claim(id: string) {
   const { data } = await createAdminClient()
@@ -145,7 +170,7 @@ async function succeed(job: Generation, file: { data: Buffer; mimeType: string }
   if (error) throw error;
   await admin
     .from("generations")
-    .update({ status: "succeeded", output_paths: [path], completed_at: new Date().toISOString() })
+    .update({ status: "succeeded", output_paths: [path] })
     .eq("id", job.id)
     // If the sweeper already failed and refunded it, leave it failed.
     .eq("status", "running");
@@ -165,6 +190,23 @@ export async function runImageJob(id: string) {
     const reference = job.input_paths[0] ? await readInput(job.input_paths[0]) : undefined;
     const image = await generateImage({ prompt: job.final_prompt, aspectRatio: job.params.aspectRatio ?? "1:1", reference });
     await succeed(job, image, "jpg");
+  } catch (error) {
+    await fail(job.id, error);
+  }
+}
+
+/** Runs one queued voiceover job to completion. Never throws: failures are recorded and refunded. */
+export async function runVoiceJob(id: string) {
+  const job = await claim(id);
+  if (!job) return;
+  try {
+    const style = VOICE_STYLES.find((s) => s.id === job.params.style) ?? VOICE_STYLES[0];
+    const audio = await synthesizeSpeech({
+      text: job.final_prompt,
+      voice: String(job.params.voice ?? "marin"),
+      instructions: style.instructions,
+    });
+    await succeed(job, audio, "mp3");
   } catch (error) {
     await fail(job.id, error);
   }

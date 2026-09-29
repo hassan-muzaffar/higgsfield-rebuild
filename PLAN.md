@@ -56,7 +56,7 @@ Lip-sync, merging a voiceover into a video, upscaling, teams/workspaces, a model
 | Realtime | Supabase Realtime on `generations` for live card updates |
 | Images | Google Gemini image model ("Nano Banana" family): text-to-image and image editing |
 | Video | Google Veo 3.1 Fast (`veo-3.1-fast-generate-preview`): text-to-video and image-to-video, 720p, with native audio |
-| Voice | OpenAI text-to-speech (voiceover) and OpenAI transcription (dictation) |
+| Voice | OpenAI `gpt-4o-mini-tts` (voiceover, with speaking-style instructions) and `gpt-transcribe` (dictation) |
 | Prompt enhance | Google Gemini text model (fast tier) |
 | Payments | Stripe Checkout (one-off credit packs) and webhooks. Test mode for the demo |
 | Hosting | Vercel (the stale-job sweeper runs in Supabase with pg_cron, so it works on the free Hobby plan) |
@@ -112,7 +112,7 @@ Supabase Realtime → pushes each row change to the studio and library
 | Image edit | 2 credits |
 | Video (per second: 4s, 6s or 8s clips) | 4 credits (16 / 24 / 32) |
 | Voiceover (per 1,000 characters, rounded up) | 2 credits |
-| Prompt enhance, dictation | Free, rate-limited |
+| Prompt enhance, dictation | Free, rate-limited per user (dictation: 30 per hour) |
 
 | Stripe pack (test mode) | Price | Credits |
 |---|---|---|
@@ -211,7 +211,7 @@ Each item must pass on the deployed app. The format is **Given / When / Then**, 
 - [ ] AC5.5 Videos are saved to Supabase Storage as MP4 and can be downloaded.
 
 ### F6 Voiceover (TTS)
-- [ ] AC6.1 The Voice tab offers at least 6 voices. Each has a ▶ preview that plays a short sample without spending credits.
+- [ ] AC6.1 The Voice tab offers 8 voices and 6 speaking styles. Each voice has a ▶ preview that plays a pre-generated sample (static file) without spending credits. Voices are labelled as AI-generated, as OpenAI's usage policy requires.
 - [ ] AC6.2 Text up to 4,000 characters generates an MP3, shown as an audio card with a waveform or progress bar and play/pause.
 - [ ] AC6.3 The cost is 2 credits per 1,000 characters (rounded up), shown before generating.
 

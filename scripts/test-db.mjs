@@ -82,6 +82,18 @@ try {
   const [s1row, s2row] = await Promise.all([stuck, fresh].map(async (g) => (await admin.from("generations").select("status,refunded").eq("id", g.id).single()).data));
   const bAfter = (await admin.from("profiles").select("credits").eq("id", B.id).single()).data.credits;
   check("sweeper fails and refunds a stuck video, leaves a fresh one", s1row.status === "failed" && s1row.refunded && s2row.status === "queued" && bAfter === 84, `credits=${bAfter}`);
+  // rate limit: at most 10 charged jobs per user per minute, and deleting jobs doesn't reset it
+  await admin.from("profiles").update({ credits: 1000 }).eq("id", A.id);
+  const job = () => admin.rpc("create_generations", { p_user_id: A.id, p_count: 4, p_kind: "image", p_mode: "text", p_model: "t", p_prompt: "p", p_final_prompt: "p", p_preset_id: null, p_params: {}, p_input_paths: [], p_cost_each: 2, p_parent_id: null });
+  const used = (await admin.from("credit_ledger").select("id", { count: "exact", head: true }).eq("user_id", A.id).eq("reason", "generation").gte("created_at", new Date(Date.now() - 60000).toISOString())).count;
+  const results = [];
+  for (let i = 0; i < 3; i++) {
+    const res = await job();
+    results.push(res.error ? "429" : "ok");
+    if (i === 0 && res.data) await admin.from("generations").delete().in("id", res.data.map((g) => g.id));
+  }
+  const expected = [0, 1, 2].map((i) => (used + 4 * (i + 1) <= 10 ? "ok" : "429")).join(",");
+  check("rate limit: >10 jobs/minute refused, even after deleting jobs", results.join(",") === expected, `already used ${used}, got ${results.join(",")}`);
   // storage: A cannot upload into B's folder
   const blob = new Blob([new Uint8Array([137,80,78,71])], { type: "image/png" });
   const s1 = await A.c.storage.from("inputs").upload(`${A.id}/t.png`, blob);
