@@ -5,7 +5,7 @@ import Link from "next/link";
 import { CoinsIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { setCredits, useCredits } from "@/lib/credits-store";
-import { createClient } from "@/lib/supabase/client";
+import { subscribeAsUser } from "@/lib/supabase/realtime";
 
 type Props = { userId: string; initial: number };
 
@@ -18,18 +18,13 @@ export function CreditBalance({ userId, initial }: Props) {
 
   // Live updates for spending, refunds and purchases, from any tab.
   useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`credits:${userId}`)
-      .on(
+    return subscribeAsUser(`credits:${userId}`, (channel) =>
+      channel.on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${userId}` },
         (payload) => setCredits((payload.new as { credits: number }).credits),
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      ),
+    );
   }, [userId]);
 
   return (

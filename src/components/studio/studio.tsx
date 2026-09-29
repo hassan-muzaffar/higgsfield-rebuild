@@ -10,6 +10,7 @@ import { adjustCredits, useCredits } from "@/lib/credits-store";
 import { imageCost, videoCost, voiceCost } from "@/lib/generations/config";
 import type { Generation, GenerationMode } from "@/lib/generations/types";
 import { createClient } from "@/lib/supabase/client";
+import { subscribeAsUser } from "@/lib/supabase/realtime";
 
 const EXAMPLE_PROMPTS = [
   "A lone astronaut walking through a neon-lit Tokyo alley in the rain, cinematic, 35mm film",
@@ -69,33 +70,28 @@ export function Studio({ userId, initialCredits, initialGenerations }: Props) {
 
   // Live status updates for this user's generations.
   useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`generations:${userId}`)
-      .on(
+    return subscribeAsUser(`generations:${userId}`, (channel) =>
+      channel.on(
         "postgres_changes",
         { event: "*", schema: "public", table: "generations", filter: `user_id=eq.${userId}` },
         (payload) => {
           if (payload.eventType === "DELETE") remove([(payload.old as { id: string }).id]);
           else upsert([payload.new as Generation]);
         },
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      ),
+    );
   }, [userId, upsert, remove]);
 
-  // Videos take minutes. While any is running, ask the server to check on it; the server
-  // saves the video when it's ready and Realtime brings the update. Polling also resumes
-  // a video after the page was closed or reloaded mid-generation.
-  const runningVideoIds = items
-    .filter((g) => g.kind === "video" && g.status === "running" && !g.id.startsWith("temp-"))
+  // Safety net for Realtime: while anything is still generating, ask the server every few seconds.
+  // For a running video this also makes the server check the provider and save the result, which
+  // is how a video finishes if the page was closed or reloaded mid-generation.
+  const pendingIds = items
+    .filter((g) => (g.status === "queued" || g.status === "running") && !g.id.startsWith("temp-"))
     .map((g) => g.id)
     .join(",");
   useEffect(() => {
-    if (!runningVideoIds) return;
-    const ids = runningVideoIds.split(",");
+    if (!pendingIds) return;
+    const ids = pendingIds.split(",");
     const timer = setInterval(() => {
       for (const id of ids) {
         fetch(`/api/generations/${id}`)
@@ -103,9 +99,9 @@ export function Studio({ userId, initialCredits, initialGenerations }: Props) {
           .then((body) => body?.generation && upsert([body.generation]))
           .catch(() => {});
       }
-    }, 5000);
+    }, 4000);
     return () => clearInterval(timer);
-  }, [runningVideoIds, upsert]);
+  }, [pendingIds, upsert]);
 
   const outputPaths = useMemo(
     () => items.filter((g) => g.status === "succeeded").flatMap((g) => g.output_paths),
