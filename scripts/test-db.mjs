@@ -6,7 +6,7 @@ const { createClient } = require("@supabase/supabase-js");
 const URL_ = process.env.NEXT_PUBLIC_SUPABASE_URL, ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, SR = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const admin = createClient(URL_, SR, { auth: { persistSession: false } });
 let pass = 0, fail = 0;
-const check = (name, ok, extra = "") => { ok ? pass++ : fail++; console.log(`${ok ? "PASS" : "FAIL"}  ${name}${extra ? "  — " + extra : ""}`); };
+const check = (name, ok, extra = "") => { if (ok) pass++; else fail++; console.log(`${ok ? "PASS" : "FAIL"}  ${name}${extra ? "  — " + extra : ""}`); };
 const stamp = Date.now(), pw = "Test-" + stamp + "-pw!";
 const users = [];
 async function mkUser(tag) {

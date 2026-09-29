@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CoinsIcon } from "lucide-react";
+import { CreditBalance } from "@/components/credit-balance";
 import { Logo } from "@/components/logo";
 import { MainNav } from "@/components/main-nav";
 import { UserMenu } from "@/components/user-menu";
@@ -17,12 +17,7 @@ export async function SiteHeader() {
         <div className="ml-auto flex items-center gap-2">
           {profile ? (
             <>
-              <Button asChild variant="secondary" size="sm" className="gap-1.5 tabular-nums">
-                <Link href="/billing" aria-label={`${profile.credits} credits. Buy more`}>
-                  <CoinsIcon className="text-primary" aria-hidden="true" />
-                  {profile.credits}
-                </Link>
-              </Button>
+              <CreditBalance userId={profile.id} initial={profile.credits} />
               <UserMenu name={profile.display_name} avatarUrl={profile.avatar_url} />
             </>
           ) : (

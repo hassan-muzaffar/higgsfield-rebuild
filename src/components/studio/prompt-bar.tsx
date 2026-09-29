@@ -1,0 +1,273 @@
+"use client";
+
+import { useRef, useState } from "react";
+import Link from "next/link";
+import {
+  ArrowUpIcon,
+  AudioLinesIcon,
+  ClapperboardIcon,
+  CoinsIcon,
+  ImageIcon,
+  ImagePlusIcon,
+  Loader2Icon,
+  XIcon,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  IMAGE_ASPECT_RATIOS,
+  imageCost,
+  MAX_IMAGES_PER_REQUEST,
+  MAX_PROMPT_LENGTH,
+  MAX_REFERENCE_IMAGE_BYTES,
+  REFERENCE_IMAGE_TYPES,
+  type ImageAspectRatio,
+} from "@/lib/generations/config";
+import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
+
+export type ImageSubmission = {
+  prompt: string;
+  aspectRatio: ImageAspectRatio;
+  count: number;
+  referencePath?: string;
+};
+
+type Reference = { path: string | null; previewUrl: string; uploading: boolean };
+
+type Props = {
+  userId: string;
+  credits: number;
+  prompt: string;
+  onPromptChange: (prompt: string) => void;
+  onSubmit: (submission: ImageSubmission) => void;
+};
+
+const TABS = [
+  { id: "image", label: "Image", icon: ImageIcon, ready: true },
+  { id: "video", label: "Video", icon: ClapperboardIcon, ready: false },
+  { id: "voice", label: "Voice", icon: AudioLinesIcon, ready: false },
+] as const;
+
+export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }: Props) {
+  const [aspectRatio, setAspectRatio] = useState<ImageAspectRatio>("1:1");
+  const [count, setCount] = useState(1);
+  const [reference, setReference] = useState<Reference | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const cost = imageCost(count);
+  const notEnoughCredits = credits < cost;
+  const canSubmit = prompt.trim().length > 0 && !notEnoughCredits && !reference?.uploading;
+
+  async function attach(file: File) {
+    setFileError(null);
+    if (!REFERENCE_IMAGE_TYPES.includes(file.type as (typeof REFERENCE_IMAGE_TYPES)[number])) {
+      setFileError("Use a PNG, JPG or WebP image.");
+      return;
+    }
+    if (file.size > MAX_REFERENCE_IMAGE_BYTES) {
+      setFileError("That image is over 10 MB. Please choose a smaller one.");
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setReference({ path: null, previewUrl, uploading: true });
+
+    const ext = file.type.split("/")[1].replace("jpeg", "jpg");
+    const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await createClient().storage.from("inputs").upload(path, file, { contentType: file.type });
+    if (error) {
+      URL.revokeObjectURL(previewUrl);
+      setReference(null);
+      setFileError("Upload failed. Please try again.");
+      return;
+    }
+    setReference({ path, previewUrl, uploading: false });
+  }
+
+  function removeReference() {
+    if (reference) URL.revokeObjectURL(reference.previewUrl);
+    setReference(null);
+    setFileError(null);
+  }
+
+  function submit() {
+    if (!canSubmit) return;
+    onSubmit({ prompt: prompt.trim(), aspectRatio, count, referencePath: reference?.path ?? undefined });
+  }
+
+  return (
+    <div className="rounded-2xl border bg-popover/95 shadow-2xl shadow-black/50 backdrop-blur-md">
+      <div className="flex items-center gap-1 border-b px-2 pt-2" role="tablist" aria-label="What to create">
+        {TABS.map(({ id, label, icon: Icon, ready }) => {
+          const tab = (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={id === "image"}
+              aria-disabled={!ready}
+              className={cn(
+                "flex items-center gap-1.5 rounded-t-lg border-b-2 px-3 pt-1 pb-2 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-ring",
+                id === "image" ? "border-primary text-foreground" : "border-transparent text-muted-foreground",
+                !ready && "cursor-not-allowed opacity-50",
+              )}
+            >
+              <Icon className="size-4" aria-hidden="true" />
+              {label}
+            </button>
+          );
+          return ready ? (
+            tab
+          ) : (
+            <Tooltip key={id}>
+              <TooltipTrigger asChild>{tab}</TooltipTrigger>
+              <TooltipContent>Coming in the next update</TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+
+      <div className="flex gap-3 p-3">
+        {reference && (
+          <div className="relative size-16 shrink-0 overflow-hidden rounded-lg border">
+            {/* eslint-disable-next-line @next/next/no-img-element -- local object URL preview */}
+            <img src={reference.previewUrl} alt="Reference image" className="size-full object-cover" />
+            {reference.uploading && (
+              <div className="absolute inset-0 grid place-items-center bg-black/60">
+                <Loader2Icon className="size-4 animate-spin" aria-label="Uploading" />
+              </div>
+            )}
+            <button
+              onClick={removeReference}
+              className="absolute top-0.5 right-0.5 grid size-5 place-items-center rounded-full bg-black/70 text-white hover:bg-black"
+              aria-label="Remove reference image"
+            >
+              <XIcon className="size-3" aria-hidden="true" />
+            </button>
+          </div>
+        )}
+        <Textarea
+          value={prompt}
+          onChange={(e) => onPromptChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          maxLength={MAX_PROMPT_LENGTH}
+          rows={2}
+          placeholder={reference ? "Describe the change, e.g. “make it night time”" : "Describe the image you want…"}
+          aria-label="Prompt"
+          className="max-h-48 min-h-12 resize-none border-0 bg-transparent p-0 text-base shadow-none focus-visible:ring-0 dark:bg-transparent"
+        />
+      </div>
+
+      {fileError && (
+        <p role="alert" className="px-3 pb-2 text-xs text-destructive">
+          {fileError}
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2 px-3 pb-3">
+        <input
+          ref={fileInput}
+          type="file"
+          accept={REFERENCE_IMAGE_TYPES.join(",")}
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) attach(file);
+            e.target.value = "";
+          }}
+        />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="secondary"
+              size="icon-sm"
+              aria-label="Add a reference image to edit"
+              onClick={() => fileInput.current?.click()}
+            >
+              <ImagePlusIcon aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Add an image to edit</TooltipContent>
+        </Tooltip>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="secondary" size="sm" aria-label={`Aspect ratio ${aspectRatio}`}>
+              <RatioIcon ratio={aspectRatio} />
+              {aspectRatio}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuLabel>Aspect ratio</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={aspectRatio} onValueChange={(v) => setAspectRatio(v as ImageAspectRatio)}>
+              {IMAGE_ASPECT_RATIOS.map((ratio) => (
+                <DropdownMenuRadioItem key={ratio} value={ratio}>
+                  <RatioIcon ratio={ratio} />
+                  {ratio}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <div className="flex items-center rounded-md bg-secondary p-0.5" role="radiogroup" aria-label="Number of images">
+          {Array.from({ length: MAX_IMAGES_PER_REQUEST }, (_, i) => i + 1).map((n) => (
+            <button
+              key={n}
+              role="radio"
+              aria-checked={count === n}
+              onClick={() => setCount(n)}
+              className={cn(
+                "h-7 min-w-7 rounded px-2 text-xs tabular-nums transition-colors focus-visible:outline-2 focus-visible:outline-ring",
+                count === n ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+
+        <div className="ml-auto flex items-center gap-3">
+          {notEnoughCredits && (
+            <Link href="/billing" className="text-xs text-primary underline-offset-2 hover:underline">
+              Buy credits
+            </Link>
+          )}
+          <Button onClick={submit} disabled={!canSubmit} className="gap-2">
+            Generate
+            <span className="flex items-center gap-1 rounded bg-primary-foreground/15 px-1.5 py-0.5 text-xs tabular-nums">
+              <CoinsIcon className="size-3" aria-hidden="true" />
+              {cost}
+            </span>
+            <ArrowUpIcon className="sm:hidden" aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RatioIcon({ ratio }: { ratio: string }) {
+  const [w, h] = ratio.split(":").map(Number);
+  const scale = 14 / Math.max(w, h);
+  return (
+    <span className="grid size-4 place-items-center" aria-hidden="true">
+      <span className="rounded-[2px] border-[1.5px] border-current" style={{ width: w * scale, height: h * scale }} />
+    </span>
+  );
+}
