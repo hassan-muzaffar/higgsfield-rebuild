@@ -1,10 +1,32 @@
+# dependencies
+/node_modules
+.pnp.*
+
+# next.js / build
+/.next/
+/out/
+/build
+/coverage
+*.tsbuildinfo
+next-env.d.ts
+
+# misc
 .DS_Store
-node_modules/
+*.pem
+npm-debug.log*
+.pnpm-debug.log*
+__pycache__/
+
+# env files
 .env*
 !.env.example
-.next/
-.vercel/
+
+# vercel / supabase local state
+.vercel
+supabase/.temp/
+supabase/.branches/
+
+# agent capture (private bits)
 .claude/hooks/capture-errors.log
 .claude/settings.local.json
 .claude/redact.local
-__pycache__/
