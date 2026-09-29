@@ -12,7 +12,8 @@
     "test:api": "node --env-file=.env.local scripts/test-api.mjs",
     "test:video": "node --env-file=.env.local scripts/test-video.mjs",
     "voices:samples": "node --env-file=.env.local scripts/generate-voice-samples.mjs",
-    "test:voice": "node --env-file=.env.local scripts/test-voice.mjs"
+    "test:voice": "node --env-file=.env.local scripts/test-voice.mjs",
+    "test:library": "node --env-file=.env.local scripts/test-library.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.24.0",

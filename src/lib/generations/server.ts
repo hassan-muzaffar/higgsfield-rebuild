@@ -54,6 +54,18 @@ async function createJobs(input: NewJobs): Promise<Generation[]> {
     }
   }
 
+  // The parent is only a link for the library: drop it rather than fail if it isn't the user's.
+  let parentId = input.parentId ?? null;
+  if (parentId) {
+    const { data: parent } = await admin
+      .from("generations")
+      .select("id")
+      .eq("id", parentId)
+      .eq("user_id", input.userId)
+      .maybeSingle();
+    if (!parent) parentId = null;
+  }
+
   const { data, error } = await admin.rpc("create_generations", {
     p_user_id: input.userId,
     p_count: input.count,
@@ -66,7 +78,7 @@ async function createJobs(input: NewJobs): Promise<Generation[]> {
     p_params: input.params,
     p_input_paths: input.inputPath ? [input.inputPath] : [],
     p_cost_each: input.costEach,
-    p_parent_id: input.parentId ?? null,
+    p_parent_id: parentId,
   });
 
   if (error) {

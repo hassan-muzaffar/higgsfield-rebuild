@@ -6,7 +6,9 @@ import {
   AudioLinesIcon,
   CopyIcon,
   DownloadIcon,
+  HeartIcon,
   Loader2Icon,
+  Maximize2Icon,
   PauseIcon,
   PlayIcon,
   RotateCcwIcon,
@@ -21,10 +23,15 @@ import { cn } from "@/lib/utils";
 type Props = {
   generation: Generation;
   mediaUrl?: string;
-  onRetry: (g: Generation) => void;
-  onDismiss: (g: Generation) => void;
+  onRetry?: (g: Generation) => void;
+  onDismiss?: (g: Generation) => void;
   onUsePrompt: (prompt: string) => void;
   onDownload: (g: Generation) => void;
+  /** Opens the detail panel. */
+  onOpen?: (g: Generation) => void;
+  favorite?: boolean;
+  onToggleFavorite?: (g: Generation) => void;
+  className?: string;
 };
 
 function aspectStyle(g: Generation) {
@@ -34,14 +41,23 @@ function aspectStyle(g: Generation) {
   return { aspectRatio: w && h ? `${w} / ${h}` : "1 / 1" };
 }
 
-export function GenerationCard({ generation: g, mediaUrl, onRetry, onDismiss, onUsePrompt, onDownload }: Props) {
+export function GenerationCard({
+  generation: g,
+  mediaUrl,
+  onRetry,
+  onDismiss,
+  onUsePrompt,
+  onDownload,
+  onOpen,
+  favorite = false,
+  onToggleFavorite,
+  className,
+}: Props) {
   const pending = g.status === "queued" || g.status === "running";
+  const done = g.status === "succeeded";
 
   return (
-    <figure
-      className="group relative overflow-hidden rounded-xl border bg-card"
-      style={aspectStyle(g)}
-    >
+    <figure className={cn("group relative overflow-hidden rounded-xl border bg-card", className)} style={aspectStyle(g)}>
       {pending && <PendingState createdAt={g.created_at} kind={g.kind} />}
 
       {g.status === "failed" && (
@@ -49,13 +65,17 @@ export function GenerationCard({ generation: g, mediaUrl, onRetry, onDismiss, on
           <AlertTriangleIcon className="size-5 text-destructive" aria-hidden="true" />
           <p className="text-xs text-muted-foreground">{g.error ?? "Generation failed. Your credits were refunded."}</p>
           <div className="flex gap-2">
-            <Button size="sm" variant="secondary" onClick={() => onRetry(g)}>
-              <RotateCcwIcon aria-hidden="true" />
-              Retry
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => onDismiss(g)} aria-label="Dismiss">
-              <XIcon aria-hidden="true" />
-            </Button>
+            {onRetry && (
+              <Button size="sm" variant="secondary" onClick={() => onRetry(g)}>
+                <RotateCcwIcon aria-hidden="true" />
+                Retry
+              </Button>
+            )}
+            {onDismiss && (
+              <Button size="sm" variant="ghost" onClick={() => onDismiss(g)} aria-label="Dismiss">
+                <XIcon aria-hidden="true" />
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -82,8 +102,41 @@ export function GenerationCard({ generation: g, mediaUrl, onRetry, onDismiss, on
         </span>
       )}
 
+      {/* Clicking an image or video opens its details; the action buttons sit above this layer. */}
+      {done && g.kind !== "voice" && onOpen && (
+        <button
+          className="absolute inset-0 cursor-zoom-in focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+          aria-label="Open details"
+          onClick={() => onOpen(g)}
+        />
+      )}
+
+      {done && (onToggleFavorite || (onOpen && g.kind === "voice")) && (
+        <div
+          className={cn(
+            "absolute top-2 right-2 flex gap-1 transition-opacity",
+            favorite ? "opacity-100" : "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100",
+          )}
+        >
+          {onOpen && g.kind === "voice" && (
+            <CardAction label="Open details" onClick={() => onOpen(g)}>
+              <Maximize2Icon aria-hidden="true" />
+            </CardAction>
+          )}
+          {onToggleFavorite && (
+            <CardAction
+              label={favorite ? "Remove from favourites" : "Add to favourites"}
+              onClick={() => onToggleFavorite(g)}
+              pressed={favorite}
+            >
+              <HeartIcon className={cn(favorite && "fill-red-500 text-red-500")} aria-hidden="true" />
+            </CardAction>
+          )}
+        </div>
+      )}
+
       {g.status === "succeeded" && g.kind !== "voice" && (
-        <figcaption className="absolute inset-x-0 bottom-0 flex items-end gap-2 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+        <figcaption className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end gap-2 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
           <p className="line-clamp-2 flex-1 text-xs text-white/90">{g.prompt}</p>
           <CardAction label="Use this prompt" onClick={() => onUsePrompt(g.prompt)}>
             <CopyIcon aria-hidden="true" />
@@ -97,11 +150,28 @@ export function GenerationCard({ generation: g, mediaUrl, onRetry, onDismiss, on
   );
 }
 
-function CardAction({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+function CardAction({
+  label,
+  onClick,
+  pressed,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  pressed?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button size="icon-sm" variant="secondary" className="shrink-0 bg-black/60 hover:bg-black/80" aria-label={label} onClick={onClick}>
+        <Button
+          size="icon-sm"
+          variant="secondary"
+          className="pointer-events-auto relative z-10 shrink-0 bg-black/60 hover:bg-black/80"
+          aria-label={label}
+          aria-pressed={pressed}
+          onClick={onClick}
+        >
           {children}
         </Button>
       </TooltipTrigger>

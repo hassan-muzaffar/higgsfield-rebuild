@@ -47,10 +47,11 @@ import {
   type VideoAspectRatio,
   type VideoDuration,
 } from "@/lib/generations/config";
+import type { Draft } from "@/lib/generations/draft-types";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
-export type Submission =
+export type Submission = { parentId?: string } & (
   | { kind: "image"; prompt: string; aspectRatio: ImageAspectRatio; count: number; referencePath?: string }
   | {
       kind: "video";
@@ -59,7 +60,8 @@ export type Submission =
       durationSeconds: VideoDuration;
       startFramePath?: string;
     }
-  | { kind: "voice"; prompt: string; voice: VoiceId; style: VoiceStyleId };
+  | { kind: "voice"; prompt: string; voice: VoiceId; style: VoiceStyleId }
+);
 
 export type Mode = "image" | "video" | "voice";
 
@@ -71,6 +73,8 @@ type Props = {
   prompt: string;
   onPromptChange: (prompt: string) => void;
   onSubmit: (submission: Submission) => void;
+  /** Initial settings from "Reuse", "Animate this", "Edit this" or "Add voiceover". */
+  draft?: Draft;
 };
 
 const TABS = [
@@ -79,15 +83,17 @@ const TABS = [
   { id: "voice", label: "Voice", icon: AudioLinesIcon, ready: true },
 ] as const;
 
-export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }: Props) {
-  const [mode, setMode] = useState<Mode>("image");
-  const [imageRatio, setImageRatio] = useState<ImageAspectRatio>("1:1");
-  const [videoRatio, setVideoRatio] = useState<VideoAspectRatio>("16:9");
-  const [count, setCount] = useState(1);
-  const [duration, setDuration] = useState<VideoDuration>(8);
-  const [voice, setVoice] = useState<VoiceId>("marin");
-  const [style, setStyle] = useState<VoiceStyleId>("natural");
-  const [reference, setReference] = useState<Reference | null>(null);
+export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit, draft }: Props) {
+  const [mode, setMode] = useState<Mode>(draft?.mode ?? "image");
+  const [imageRatio, setImageRatio] = useState<ImageAspectRatio>(draft?.image?.aspectRatio ?? "1:1");
+  const [videoRatio, setVideoRatio] = useState<VideoAspectRatio>(draft?.video?.aspectRatio ?? "16:9");
+  const [count, setCount] = useState(draft?.image?.count ?? 1);
+  const [duration, setDuration] = useState<VideoDuration>(draft?.video?.durationSeconds ?? 8);
+  const [voice, setVoice] = useState<VoiceId>(draft?.voice?.voice ?? "marin");
+  const [style, setStyle] = useState<VoiceStyleId>(draft?.voice?.style ?? "natural");
+  const [reference, setReference] = useState<Reference | null>(
+    draft?.reference ? { ...draft.reference, uploading: false, type: "image/jpeg" } : null,
+  );
   const [fileError, setFileError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
@@ -150,7 +156,7 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
   }
 
   function removeReference() {
-    if (reference) URL.revokeObjectURL(reference.previewUrl);
+    if (reference?.previewUrl.startsWith("blob:")) URL.revokeObjectURL(reference.previewUrl);
     setReference(null);
     setFileError(null);
   }
@@ -159,12 +165,13 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
     if (!canSubmit) return;
     const path = reference?.path ?? undefined;
     const text = prompt.trim();
+    const parentId = draft?.parentId;
     onSubmit(
       mode === "voice"
-        ? { kind: "voice", prompt: text, voice, style }
+        ? { kind: "voice", prompt: text, voice, style, parentId }
         : mode === "video"
-          ? { kind: "video", prompt: text, aspectRatio: videoRatio, durationSeconds: duration, startFramePath: path }
-          : { kind: "image", prompt: text, aspectRatio: imageRatio, count, referencePath: path },
+          ? { kind: "video", prompt: text, aspectRatio: videoRatio, durationSeconds: duration, startFramePath: path, parentId }
+          : { kind: "image", prompt: text, aspectRatio: imageRatio, count, referencePath: path, parentId },
     );
   }
 

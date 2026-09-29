@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SparklesIcon } from "lucide-react";
 import { toast } from "sonner";
+import { GenerationDetail } from "@/components/generation-detail";
+import { downloadGeneration } from "@/lib/generations/client-actions";
+import type { Draft } from "@/lib/generations/draft-types";
+import { useFavorites } from "@/lib/generations/use-favorites";
 import { GenerationCard } from "@/components/studio/generation-card";
 import { PromptBar, type Submission } from "@/components/studio/prompt-bar";
 import { useSignedUrls } from "@/components/studio/use-signed-urls";
@@ -18,7 +22,13 @@ const EXAMPLE_PROMPTS = [
   "A cosy reading nook in a treehouse at golden hour, Studio Ghibli style",
 ];
 
-type Props = { userId: string; initialCredits: number; initialGenerations: Generation[] };
+type Props = {
+  userId: string;
+  initialCredits: number;
+  initialGenerations: Generation[];
+  initialFavoriteIds: string[];
+  draft?: Draft;
+};
 
 /** What a submission will create and cost, for placeholder cards and the optimistic balance. */
 function describe(s: Submission): { count: number; cost: number; mode: GenerationMode; params: Generation["params"] } {
@@ -51,10 +61,18 @@ function sortNewestFirst(list: Generation[]) {
   return [...list].sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
-export function Studio({ userId, initialCredits, initialGenerations }: Props) {
+export function Studio({ userId, initialCredits, initialGenerations, initialFavoriteIds, draft }: Props) {
   const credits = useCredits(initialCredits);
   const [items, setItems] = useState<Generation[]>(initialGenerations);
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(draft?.prompt ?? "");
+  const [openId, setOpenId] = useState<string | null>(null);
+  const favorites = useFavorites(userId, initialFavoriteIds);
+
+  // A draft arrives as ?animate=<id> etc.; drop the query so a reload doesn't re-apply it.
+  // history.replaceState (not router.replace) keeps the current render, and with it the draft.
+  useEffect(() => {
+    if (draft) window.history.replaceState(null, "", "/create");
+  }, [draft]);
 
   const upsert = useCallback((incoming: Generation[]) => {
     setItems((prev) => {
@@ -183,18 +201,11 @@ export function Studio({ userId, initialCredits, initialGenerations }: Props) {
     }
   }
 
-  async function download(g: Generation) {
-    const path = g.output_paths[0];
-    if (!path) return;
-    const { data, error } = await createClient()
-      .storage.from("outputs")
-      .createSignedUrl(path, 60, { download: `oneshot-${g.id.slice(0, 8)}.${path.split(".").pop()}` });
-    if (error || !data) {
-      toast.error("Couldn't start the download. Please try again.");
-      return;
-    }
-    window.location.assign(data.signedUrl);
+  function download(g: Generation) {
+    downloadGeneration(g).catch((error) => toast.error(error instanceof Error ? error.message : "Download failed."));
   }
+
+  const finished = useMemo(() => items.filter((g) => g.status === "succeeded"), [items]);
 
   function reusePrompt(text: string) {
     setPrompt(text);
@@ -235,14 +246,34 @@ export function Studio({ userId, initialCredits, initialGenerations }: Props) {
               onDismiss={dismiss}
               onUsePrompt={reusePrompt}
               onDownload={download}
+              onOpen={(item) => setOpenId(item.id)}
+              favorite={favorites.isFavorite(g.id)}
+              onToggleFavorite={(item) => favorites.toggle(item.id)}
             />
           ))}
         </section>
       )}
 
       <div className="sticky bottom-4 z-30 mx-auto mt-6 w-full max-w-3xl">
-        <PromptBar userId={userId} credits={credits} prompt={prompt} onPromptChange={setPrompt} onSubmit={generate} />
+        <PromptBar
+          userId={userId}
+          credits={credits}
+          prompt={prompt}
+          onPromptChange={setPrompt}
+          onSubmit={generate}
+          draft={draft}
+        />
       </div>
+
+      <GenerationDetail
+        items={finished}
+        openId={openId}
+        onOpenIdChange={setOpenId}
+        urls={urls}
+        isFavorite={favorites.isFavorite}
+        onToggleFavorite={(g) => favorites.toggle(g.id)}
+        onDeleted={(id) => remove([id])}
+      />
     </div>
   );
 }
