@@ -1,4 +1,4 @@
-# Oneshot: Product & Build Plan
+# OneShot: Product & Build Plan
 
 A rebuild of [higgsfield.ai](https://higgsfield.ai) (an AI studio for images, video and voice), built for the 8x assignment.
 
@@ -7,7 +7,7 @@ A rebuild of [higgsfield.ai](https://higgsfield.ai) (an AI studio for images, vi
 ## 1. Purpose
 
 ### What we are building
-**Oneshot** is a web studio where a creator types an idea, or says it out loud, and gets back a finished image, video clip or voiceover. They can then build on the result: edit an image, animate it into a video, or give it a voice, all in the same place.
+**OneShot** is a web studio where a creator types an idea, or says it out loud, and gets back a finished image, video clip or voiceover. They can then build on the result: edit an image, animate it into a video, or give it a voice, all in the same place.
 
 It rebuilds what makes Higgsfield worth using:
 - **One prompt bar for every medium.** Image, video and voice live in one studio, not three tools.
