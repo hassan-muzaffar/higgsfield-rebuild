@@ -55,11 +55,11 @@ Lip-sync, merging a voiceover into a video, upscaling, teams/workspaces, a model
 | Storage | Supabase Storage: `inputs` and `outputs` buckets (private, served through signed URLs) |
 | Realtime | Supabase Realtime on `generations` for live card updates |
 | Images | Google Gemini image model ("Nano Banana" family): text-to-image and image editing |
-| Video | Google Veo (latest generally available version): text-to-video and image-to-video, with native audio |
+| Video | Google Veo 3.1 Fast (`veo-3.1-fast-generate-preview`): text-to-video and image-to-video, 720p, with native audio |
 | Voice | OpenAI text-to-speech (voiceover) and OpenAI transcription (dictation) |
 | Prompt enhance | Google Gemini text model (fast tier) |
 | Payments | Stripe Checkout (one-off credit packs) and webhooks. Test mode for the demo |
-| Hosting | Vercel (with Vercel Cron for the stale-job sweeper) |
+| Hosting | Vercel (the stale-job sweeper runs in Supabase with pg_cron, so it works on the free Hobby plan) |
 
 Exact model IDs live in one file (`lib/ai/models.ts`) and are checked against the providers' docs when each integration is built.
 
@@ -84,7 +84,7 @@ GET /api/generations/:id   (the client polls this every 5s while a video is runn
   └─ if running and it has an operation id → check the provider → when done, upload → succeeded
 
 On any failure → status = failed, error saved, refund_credits() (every job is refunded at most once)
-Vercel Cron (every 5 min) → jobs stuck for more than 15 min → failed + refunded
+Supabase pg_cron (every 5 min) → images stuck > 5 min, videos > 15 min → failed + refunded
 Supabase Realtime → pushes each row change to the studio and library
 ```
 
@@ -110,7 +110,7 @@ Supabase Realtime → pushes each row change to the studio and library
 |---|---|
 | Image (per image) | 2 credits |
 | Image edit | 2 credits |
-| Video (one clip) | 30 credits |
+| Video (per second: 4s, 6s or 8s clips) | 4 credits (16 / 24 / 32) |
 | Voiceover (per 1,000 characters, rounded up) | 2 credits |
 | Prompt enhance, dictation | Free, rate-limited |
 
@@ -133,13 +133,12 @@ Supabase Realtime → pushes each row change to the studio and library
 | `/explore` | Public community feed |
 | `/g/[slug]` | Public share page for one generation |
 | `/billing` | Balance, buy credits, purchase history, credit usage |
-| `/api/generate`, `/api/generations/[id]` | Job creation and status |
+| `/api/generate`, `/api/generations/[id]`, `/api/generations/[id]/retry` | Job creation, status (checks running videos), retry |
 | `/api/enhance`, `/api/transcribe` | Prompt enhance, dictation |
 | `/api/stripe/checkout`, `/api/stripe/webhook` | Payments |
-| `/api/cron/sweep` | Stale-job sweeper (protected by `CRON_SECRET`) |
 
 ### 4.5 Environment variables
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GOOGLE_AI_API_KEY`, `OPENAI_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_APP_URL`, `CRON_SECRET`. All of them except the `NEXT_PUBLIC_*` ones are server-only. `.env.example` is committed; real values never are.
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GOOGLE_AI_API_KEY`, `OPENAI_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_APP_URL`. All of them except the `NEXT_PUBLIC_*` ones are server-only. `.env.example` is committed; real values never are.
 
 ---
 
@@ -189,7 +188,7 @@ Each item must pass on the deployed app. The format is **Given / When / Then**, 
 - [ ] AC3.1 `/create` shows a results feed with a prompt bar fixed at the bottom, which has **Image / Video / Voice** tabs.
 - [ ] AC3.2 Each tab shows only its own controls:
   - **Image:** aspect ratio (1:1, 3:4, 4:3, 9:16, 16:9), count (1–4), reference image upload.
-  - **Video:** aspect ratio (16:9, 9:16), start-frame image upload.
+  - **Video:** aspect ratio (16:9, 9:16), duration (4s, 6s, 8s), start-frame image upload (PNG/JPG).
   - **Voice:** voice picker with a preview button, and a character counter.
 - [ ] AC3.3 The Generate button shows the credit cost for the current settings and updates as they change.
 - [ ] AC3.4 Generate is disabled when the prompt is empty, or when the balance is too low. In the low-balance case, a **"Buy credits"** link appears.
@@ -273,7 +272,7 @@ Each item must pass on the deployed app. The format is **Given / When / Then**, 
 - [ ] AC15.3 **Accessibility:** everything can be reached with the keyboard with a visible focus ring, icon buttons have `aria-label`s, text contrast meets WCAG AA, and animations respect `prefers-reduced-motion`.
 - [ ] AC15.4 **Security:**
   - No server secret appears in the client bundle (checked by grepping the build output).
-  - All `/api` routes except the webhook, cron and public share lookups require a session.
+  - All `/api` routes except the Stripe webhook and public share lookups require a session.
   - RLS is enabled on every table, and a second test user cannot read, update or delete the first user's private generations or files.
 - [ ] AC15.5 **Validation and limits:** every API input is validated with zod. Generation is rate-limited to 10 requests per minute per user.
 - [ ] AC15.6 **Feedback:** each action (generate, delete, share, favourite, purchase) gives visible feedback within 300 ms (an optimistic update, a toast or a spinner).
@@ -297,7 +296,7 @@ Each milestone ends tested locally and demoable. We deploy a Vercel preview once
 |---|---|---|---|
 | M1 | Foundations | Scaffold, theme, Supabase schema + RLS + credit functions, F2, app shell, `/privacy` + `/terms` | Sign in locally and see 50 credits ✅ |
 | M2 | Image pipeline | Job system, F3, F4 | AC3.x, AC4.x pass |
-| M3 | Video | F5, sweeper cron | AC5.x pass, including refreshing mid-job |
+| M3 | Video | F5, pg_cron stale-job sweeper | AC5.x pass, including refreshing mid-job |
 | M4 | Voice | F6, F7 | AC6.x, AC7.x pass |
 | M5 | Library & chaining | F10, F11 | AC10.x, AC11.x pass |
 | M6 | Creative boosters | F8 (seed presets and thumbnails), F9 | AC8.x, AC9.x pass |
@@ -313,7 +312,7 @@ The core product (create, see and reuse) works end to end by M5. After that, eac
 
 | Risk | Mitigation |
 |---|---|
-| Veo is slow and expensive | Credits price it at 30. Jobs run in the background with polling. A sweeper refunds stuck jobs. During development we use as few video runs as possible. |
+| Veo is slow and expensive | We use Veo 3.1 Fast at 720p and charge 4 credits per second. Jobs run in the background with polling. A sweeper refunds stuck jobs. During development we use as few video runs as possible. |
 | Serverless time limits | Image and voice jobs run in `after()`. Video uses long-running operation polling, so no single request waits more than about 60 s. |
 | Provider model IDs or APIs change | All IDs live in `lib/ai/models.ts`, and each provider sits behind a small adapter with the same interface. |
 | Public demo abuse | Signup grant capped at 50 credits, per-user rate limits, a 4,000-character limit on voice text, and file size and type checks. |

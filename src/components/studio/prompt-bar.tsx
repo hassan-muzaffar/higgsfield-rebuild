@@ -30,49 +30,70 @@ import {
   MAX_PROMPT_LENGTH,
   MAX_REFERENCE_IMAGE_BYTES,
   REFERENCE_IMAGE_TYPES,
+  START_FRAME_TYPES,
+  VIDEO_ASPECT_RATIOS,
+  VIDEO_DURATIONS,
+  videoCost,
   type ImageAspectRatio,
+  type VideoAspectRatio,
+  type VideoDuration,
 } from "@/lib/generations/config";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
-export type ImageSubmission = {
-  prompt: string;
-  aspectRatio: ImageAspectRatio;
-  count: number;
-  referencePath?: string;
-};
+export type Submission =
+  | { kind: "image"; prompt: string; aspectRatio: ImageAspectRatio; count: number; referencePath?: string }
+  | {
+      kind: "video";
+      prompt: string;
+      aspectRatio: VideoAspectRatio;
+      durationSeconds: VideoDuration;
+      startFramePath?: string;
+    };
 
-type Reference = { path: string | null; previewUrl: string; uploading: boolean };
+export type Mode = "image" | "video";
+
+type Reference = { path: string | null; previewUrl: string; uploading: boolean; type: string };
 
 type Props = {
   userId: string;
   credits: number;
   prompt: string;
   onPromptChange: (prompt: string) => void;
-  onSubmit: (submission: ImageSubmission) => void;
+  onSubmit: (submission: Submission) => void;
 };
 
 const TABS = [
   { id: "image", label: "Image", icon: ImageIcon, ready: true },
-  { id: "video", label: "Video", icon: ClapperboardIcon, ready: false },
+  { id: "video", label: "Video", icon: ClapperboardIcon, ready: true },
   { id: "voice", label: "Voice", icon: AudioLinesIcon, ready: false },
 ] as const;
 
 export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }: Props) {
-  const [aspectRatio, setAspectRatio] = useState<ImageAspectRatio>("1:1");
+  const [mode, setMode] = useState<Mode>("image");
+  const [imageRatio, setImageRatio] = useState<ImageAspectRatio>("1:1");
+  const [videoRatio, setVideoRatio] = useState<VideoAspectRatio>("16:9");
   const [count, setCount] = useState(1);
+  const [duration, setDuration] = useState<VideoDuration>(8);
   const [reference, setReference] = useState<Reference | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const cost = imageCost(count);
+  const allowedTypes: readonly string[] = mode === "video" ? START_FRAME_TYPES : REFERENCE_IMAGE_TYPES;
+  const cost = mode === "video" ? videoCost(duration) : imageCost(count);
   const notEnoughCredits = credits < cost;
   const canSubmit = prompt.trim().length > 0 && !notEnoughCredits && !reference?.uploading;
 
+  function switchMode(next: Mode) {
+    setMode(next);
+    // A WebP reference works for image edits but not as a video start frame.
+    if (next === "video" && reference?.type === "image/webp") removeReference();
+  }
+
   async function attach(file: File) {
     setFileError(null);
-    if (!REFERENCE_IMAGE_TYPES.includes(file.type as (typeof REFERENCE_IMAGE_TYPES)[number])) {
-      setFileError("Use a PNG, JPG or WebP image.");
+    if (!allowedTypes.includes(file.type)) {
+      setFileError(mode === "video" ? "Use a PNG or JPG image as the start frame." : "Use a PNG, JPG or WebP image.");
       return;
     }
     if (file.size > MAX_REFERENCE_IMAGE_BYTES) {
@@ -81,7 +102,7 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
     }
 
     const previewUrl = URL.createObjectURL(file);
-    setReference({ path: null, previewUrl, uploading: true });
+    setReference({ path: null, previewUrl, uploading: true, type: file.type });
 
     const ext = file.type.split("/")[1].replace("jpeg", "jpg");
     const path = `${userId}/${crypto.randomUUID()}.${ext}`;
@@ -92,7 +113,7 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
       setFileError("Upload failed. Please try again.");
       return;
     }
-    setReference({ path, previewUrl, uploading: false });
+    setReference({ path, previewUrl, uploading: false, type: file.type });
   }
 
   function removeReference() {
@@ -103,7 +124,12 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
 
   function submit() {
     if (!canSubmit) return;
-    onSubmit({ prompt: prompt.trim(), aspectRatio, count, referencePath: reference?.path ?? undefined });
+    const path = reference?.path ?? undefined;
+    onSubmit(
+      mode === "video"
+        ? { kind: "video", prompt: prompt.trim(), aspectRatio: videoRatio, durationSeconds: duration, startFramePath: path }
+        : { kind: "image", prompt: prompt.trim(), aspectRatio: imageRatio, count, referencePath: path },
+    );
   }
 
   return (
@@ -114,11 +140,12 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
             <button
               key={id}
               role="tab"
-              aria-selected={id === "image"}
+              aria-selected={id === mode}
               aria-disabled={!ready}
+              onClick={() => ready && switchMode(id as Mode)}
               className={cn(
                 "flex items-center gap-1.5 rounded-t-lg border-b-2 px-3 pt-1 pb-2 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-ring",
-                id === "image" ? "border-primary text-foreground" : "border-transparent text-muted-foreground",
+                id === mode ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
                 !ready && "cursor-not-allowed opacity-50",
               )}
             >
@@ -141,7 +168,7 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
         {reference && (
           <div className="relative size-16 shrink-0 overflow-hidden rounded-lg border">
             {/* eslint-disable-next-line @next/next/no-img-element -- local object URL preview */}
-            <img src={reference.previewUrl} alt="Reference image" className="size-full object-cover" />
+            <img src={reference.previewUrl} alt={mode === "video" ? "Start frame" : "Reference image"} className="size-full object-cover" />
             {reference.uploading && (
               <div className="absolute inset-0 grid place-items-center bg-black/60">
                 <Loader2Icon className="size-4 animate-spin" aria-label="Uploading" />
@@ -150,7 +177,7 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
             <button
               onClick={removeReference}
               className="absolute top-0.5 right-0.5 grid size-5 place-items-center rounded-full bg-black/70 text-white hover:bg-black"
-              aria-label="Remove reference image"
+              aria-label={mode === "video" ? "Remove start frame" : "Remove reference image"}
             >
               <XIcon className="size-3" aria-hidden="true" />
             </button>
@@ -167,7 +194,15 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
           }}
           maxLength={MAX_PROMPT_LENGTH}
           rows={2}
-          placeholder={reference ? "Describe the change, e.g. “make it night time”" : "Describe the image you want…"}
+          placeholder={
+            mode === "video"
+              ? reference
+                ? "Describe how the scene should move, e.g. “slow push-in as the waves crash”"
+                : "Describe the shot: subject, motion, camera, mood…"
+              : reference
+                ? "Describe the change, e.g. “make it night time”"
+                : "Describe the image you want…"
+          }
           aria-label="Prompt"
           className="max-h-48 min-h-12 resize-none border-0 bg-transparent p-0 text-base shadow-none focus-visible:ring-0 dark:bg-transparent"
         />
@@ -183,7 +218,7 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
         <input
           ref={fileInput}
           type="file"
-          accept={REFERENCE_IMAGE_TYPES.join(",")}
+          accept={allowedTypes.join(",")}
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -196,51 +231,38 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
             <Button
               variant="secondary"
               size="icon-sm"
-              aria-label="Add a reference image to edit"
+              aria-label={mode === "video" ? "Add a start frame to animate" : "Add a reference image to edit"}
               onClick={() => fileInput.current?.click()}
             >
               <ImagePlusIcon aria-hidden="true" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Add an image to edit</TooltipContent>
+          <TooltipContent>{mode === "video" ? "Animate an image" : "Add an image to edit"}</TooltipContent>
         </Tooltip>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="secondary" size="sm" aria-label={`Aspect ratio ${aspectRatio}`}>
-              <RatioIcon ratio={aspectRatio} />
-              {aspectRatio}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuLabel>Aspect ratio</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={aspectRatio} onValueChange={(v) => setAspectRatio(v as ImageAspectRatio)}>
-              {IMAGE_ASPECT_RATIOS.map((ratio) => (
-                <DropdownMenuRadioItem key={ratio} value={ratio}>
-                  <RatioIcon ratio={ratio} />
-                  {ratio}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <div className="flex items-center rounded-md bg-secondary p-0.5" role="radiogroup" aria-label="Number of images">
-          {Array.from({ length: MAX_IMAGES_PER_REQUEST }, (_, i) => i + 1).map((n) => (
-            <button
-              key={n}
-              role="radio"
-              aria-checked={count === n}
-              onClick={() => setCount(n)}
-              className={cn(
-                "h-7 min-w-7 rounded px-2 text-xs tabular-nums transition-colors focus-visible:outline-2 focus-visible:outline-ring",
-                count === n ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
+        {mode === "image" ? (
+          <>
+            <RatioMenu value={imageRatio} options={IMAGE_ASPECT_RATIOS} onChange={setImageRatio} />
+            <Segmented
+              label="Number of images"
+              options={Array.from({ length: MAX_IMAGES_PER_REQUEST }, (_, i) => i + 1)}
+              value={count}
+              onChange={setCount}
+              format={(n) => String(n)}
+            />
+          </>
+        ) : (
+          <>
+            <RatioMenu value={videoRatio} options={VIDEO_ASPECT_RATIOS} onChange={setVideoRatio} />
+            <Segmented
+              label="Duration"
+              options={VIDEO_DURATIONS}
+              value={duration}
+              onChange={setDuration}
+              format={(d) => `${d}s`}
+            />
+          </>
+        )}
 
         <div className="ml-auto flex items-center gap-3">
           {notEnoughCredits && (
@@ -258,6 +280,71 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit }:
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function RatioMenu<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: readonly T[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="secondary" size="sm" aria-label={`Aspect ratio ${value}`}>
+          <RatioIcon ratio={value} />
+          {value}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuLabel>Aspect ratio</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={value} onValueChange={(v) => onChange(v as T)}>
+          {options.map((ratio) => (
+            <DropdownMenuRadioItem key={ratio} value={ratio}>
+              <RatioIcon ratio={ratio} />
+              {ratio}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function Segmented<T extends number>({
+  label,
+  options,
+  value,
+  onChange,
+  format,
+}: {
+  label: string;
+  options: readonly T[];
+  value: T;
+  onChange: (value: T) => void;
+  format: (value: T) => string;
+}) {
+  return (
+    <div className="flex items-center rounded-md bg-secondary p-0.5" role="radiogroup" aria-label={label}>
+      {options.map((option) => (
+        <button
+          key={option}
+          role="radio"
+          aria-checked={value === option}
+          onClick={() => onChange(option)}
+          className={cn(
+            "h-7 min-w-7 rounded px-2 text-xs tabular-nums transition-colors focus-visible:outline-2 focus-visible:outline-ring",
+            value === option ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {format(option)}
+        </button>
+      ))}
     </div>
   );
 }

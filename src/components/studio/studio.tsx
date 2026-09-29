@@ -4,10 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { SparklesIcon } from "lucide-react";
 import { toast } from "sonner";
 import { GenerationCard } from "@/components/studio/generation-card";
-import { PromptBar, type ImageSubmission } from "@/components/studio/prompt-bar";
+import { PromptBar, type Submission } from "@/components/studio/prompt-bar";
 import { useSignedUrls } from "@/components/studio/use-signed-urls";
 import { adjustCredits, useCredits } from "@/lib/credits-store";
-import { imageCost } from "@/lib/generations/config";
+import { imageCost, videoCost } from "@/lib/generations/config";
 import type { Generation } from "@/lib/generations/types";
 import { createClient } from "@/lib/supabase/client";
 
@@ -59,29 +59,61 @@ export function Studio({ userId, initialCredits, initialGenerations }: Props) {
     };
   }, [userId, upsert, remove]);
 
+  // Videos take minutes. While any is running, ask the server to check on it; the server
+  // saves the video when it's ready and Realtime brings the update. Polling also resumes
+  // a video after the page was closed or reloaded mid-generation.
+  const runningVideoIds = items
+    .filter((g) => g.kind === "video" && g.status === "running" && !g.id.startsWith("temp-"))
+    .map((g) => g.id)
+    .join(",");
+  useEffect(() => {
+    if (!runningVideoIds) return;
+    const ids = runningVideoIds.split(",");
+    const timer = setInterval(() => {
+      for (const id of ids) {
+        fetch(`/api/generations/${id}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((body) => body?.generation && upsert([body.generation]))
+          .catch(() => {});
+      }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [runningVideoIds, upsert]);
+
   const outputPaths = useMemo(
     () => items.filter((g) => g.status === "succeeded").flatMap((g) => g.output_paths),
     [items],
   );
   const urls = useSignedUrls(outputPaths);
 
-  async function generate(submission: ImageSubmission) {
-    const cost = imageCost(submission.count);
+  async function generate(submission: Submission) {
+    const isVideo = submission.kind === "video";
+    const count = isVideo ? 1 : submission.count;
+    const cost = isVideo ? videoCost(submission.durationSeconds) : imageCost(submission.count);
     // Show placeholder cards immediately; swap them for the real jobs when the server replies.
     const now = new Date().toISOString();
-    const temps: Generation[] = Array.from({ length: submission.count }, () => ({
+    const temps: Generation[] = Array.from({ length: count }, () => ({
       id: `temp-${crypto.randomUUID()}`,
       user_id: userId,
-      kind: "image",
-      mode: submission.referencePath ? "edit" : "text",
+      kind: submission.kind,
+      mode: isVideo
+        ? submission.startFramePath
+          ? "image_to_video"
+          : "text"
+        : submission.referencePath
+          ? "edit"
+          : "text",
       model: "",
       prompt: submission.prompt,
       final_prompt: submission.prompt,
       preset_id: null,
-      params: { aspectRatio: submission.aspectRatio },
+      params: isVideo
+        ? { aspectRatio: submission.aspectRatio, durationSeconds: submission.durationSeconds }
+        : { aspectRatio: submission.aspectRatio },
       input_paths: [],
       output_paths: [],
       status: "queued",
+      provider_op_id: null,
       error: null,
       cost: 0,
       refunded: false,
@@ -99,7 +131,7 @@ export function Studio({ userId, initialCredits, initialGenerations }: Props) {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "image", ...submission }),
+        body: JSON.stringify(submission),
       });
       const body = await res.json();
       remove(tempIds);
@@ -143,7 +175,7 @@ export function Studio({ userId, initialCredits, initialGenerations }: Props) {
     if (!path) return;
     const { data, error } = await createClient()
       .storage.from("outputs")
-      .createSignedUrl(path, 60, { download: `oneshot-${g.id.slice(0, 8)}.jpg` });
+      .createSignedUrl(path, 60, { download: `oneshot-${g.id.slice(0, 8)}.${g.kind === "video" ? "mp4" : "jpg"}` });
     if (error || !data) {
       toast.error("Couldn't start the download. Please try again.");
       return;
@@ -165,7 +197,7 @@ export function Studio({ userId, initialCredits, initialGenerations }: Props) {
           </div>
           <h1 className="text-xl font-semibold">What will you create first?</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Describe an image below, or start from one of these.
+            Describe an image or a video below, or start from one of these.
           </p>
           <div className="mt-6 grid w-full max-w-3xl gap-3 sm:grid-cols-3">
             {EXAMPLE_PROMPTS.map((example) => (
@@ -185,7 +217,7 @@ export function Studio({ userId, initialCredits, initialGenerations }: Props) {
             <GenerationCard
               key={g.id}
               generation={g}
-              imageUrl={g.output_paths[0] ? urls[g.output_paths[0]] : undefined}
+              mediaUrl={g.output_paths[0] ? urls[g.output_paths[0]] : undefined}
               onRetry={retry}
               onDismiss={dismiss}
               onUsePrompt={reusePrompt}

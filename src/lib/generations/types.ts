@@ -12,10 +12,11 @@ export type Generation = {
   prompt: string;
   final_prompt: string;
   preset_id: string | null;
-  params: { aspectRatio?: string } & Record<string, unknown>;
+  params: { aspectRatio?: string; durationSeconds?: number } & Record<string, unknown>;
   input_paths: string[];
   output_paths: string[];
   status: GenerationStatus;
+  provider_op_id: string | null;
   error: string | null;
   cost: number;
   refunded: boolean;
@@ -27,4 +28,4 @@ export type Generation = {
 };
 
 export const GENERATION_COLUMNS =
-  "id, user_id, kind, mode, model, prompt, final_prompt, preset_id, params, input_paths, output_paths, status, error, cost, refunded, is_public, share_slug, parent_id, created_at, completed_at";
+  "id, user_id, kind, mode, model, prompt, final_prompt, preset_id, params, input_paths, output_paths, status, provider_op_id, error, cost, refunded, is_public, share_slug, parent_id, created_at, completed_at";

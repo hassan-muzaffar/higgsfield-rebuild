@@ -1,14 +1,32 @@
 import { after, NextResponse } from "next/server";
 import { createClient, getUserId } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { IMAGE_ASPECT_RATIOS, type ImageAspectRatio } from "@/lib/generations/config";
-import { createImageJobs, GenerationRequestError, runImageJob } from "@/lib/generations/server";
+import {
+  IMAGE_ASPECT_RATIOS,
+  VIDEO_ASPECT_RATIOS,
+  VIDEO_DURATIONS,
+  type ImageAspectRatio,
+  type VideoAspectRatio,
+  type VideoDuration,
+} from "@/lib/generations/config";
+import {
+  createImageJobs,
+  createVideoJob,
+  GenerationRequestError,
+  runImageJob,
+  runVideoJob,
+} from "@/lib/generations/server";
 import { GENERATION_COLUMNS, type Generation } from "@/lib/generations/types";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
+
+function pick<T extends string | number>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return allowed.includes(value as T) ? (value as T) : fallback;
+}
 
 /** Re-runs a failed generation as a new job (charged again; the failed one was refunded) and removes the failed one. */
 export async function POST(_request: Request, ctx: RouteContext<"/api/generations/[id]/retry">) {
+  const startedAt = Date.now();
   const userId = await getUserId();
   if (!userId) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
 
@@ -21,25 +39,37 @@ export async function POST(_request: Request, ctx: RouteContext<"/api/generation
     .maybeSingle<Generation>();
 
   if (!failed) return NextResponse.json({ error: "Not found." }, { status: 404 });
-  if (failed.status !== "failed" || failed.kind !== "image") {
-    return NextResponse.json({ error: "Only failed images can be retried." }, { status: 409 });
+  if (failed.status !== "failed" || failed.kind === "voice") {
+    return NextResponse.json({ error: "Only failed images and videos can be retried." }, { status: 409 });
   }
 
-  const aspectRatio = IMAGE_ASPECT_RATIOS.includes(failed.params.aspectRatio as ImageAspectRatio)
-    ? (failed.params.aspectRatio as ImageAspectRatio)
-    : "1:1";
-
   try {
-    const [job] = await createImageJobs({
+    const common = {
       userId,
       prompt: failed.prompt,
-      aspectRatio,
-      count: 1,
-      referencePath: failed.input_paths[0],
       parentId: failed.parent_id ?? undefined,
-    });
+    };
+    let job: Generation;
+    if (failed.kind === "image") {
+      [job] = await createImageJobs({
+        ...common,
+        aspectRatio: pick<ImageAspectRatio>(failed.params.aspectRatio, IMAGE_ASPECT_RATIOS, "1:1"),
+        count: 1,
+        referencePath: failed.input_paths[0],
+      });
+    } else {
+      job = await createVideoJob({
+        ...common,
+        aspectRatio: pick<VideoAspectRatio>(failed.params.aspectRatio, VIDEO_ASPECT_RATIOS, "16:9"),
+        durationSeconds: pick<VideoDuration>(failed.params.durationSeconds, VIDEO_DURATIONS, 8),
+        startFramePath: failed.input_paths[0],
+      });
+    }
+
     await createAdminClient().from("generations").delete().eq("id", failed.id);
-    after(() => runImageJob(job.id));
+    after(() =>
+      job.kind === "video" ? runVideoJob(job.id, startedAt + (maxDuration - 20) * 1000) : runImageJob(job.id),
+    );
     return NextResponse.json({ generation: job, replaced: failed.id }, { status: 202 });
   } catch (error) {
     if (error instanceof GenerationRequestError) {

@@ -72,6 +72,16 @@ try {
   const p1 = await admin.rpc("grant_credits", { p_user_id: A.id, p_amount: 100, p_reason: "purchase", p_ref_id: "cs_test_" + stamp });
   const p2 = await admin.rpc("grant_credits", { p_user_id: A.id, p_amount: 100, p_reason: "purchase", p_ref_id: "cs_test_" + stamp });
   check("same purchase credited only once", p1.data === 120 && p2.data === 120, `first=${p1.data} second=${p2.data}`);
+  // stale-job sweeper: a video stuck for 20 minutes is failed and refunded; a fresh one is left alone
+  await admin.from("profiles").update({ credits: 100 }).eq("id", B.id);
+  const oldTs = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+  const stuck = (await admin.rpc("create_generations", { p_user_id: B.id, p_count: 1, p_kind: "video", p_mode: "text", p_model: "t", p_prompt: "p", p_final_prompt: "p", p_preset_id: null, p_params: {}, p_input_paths: [], p_cost_each: 16, p_parent_id: null })).data[0];
+  const fresh = (await admin.rpc("create_generations", { p_user_id: B.id, p_count: 1, p_kind: "video", p_mode: "text", p_model: "t", p_prompt: "p", p_final_prompt: "p", p_preset_id: null, p_params: {}, p_input_paths: [], p_cost_each: 16, p_parent_id: null })).data[0];
+  await admin.from("generations").update({ status: "running", created_at: oldTs }).eq("id", stuck.id);
+  await admin.rpc("fail_stale_generations");
+  const [s1row, s2row] = await Promise.all([stuck, fresh].map(async (g) => (await admin.from("generations").select("status,refunded").eq("id", g.id).single()).data));
+  const bAfter = (await admin.from("profiles").select("credits").eq("id", B.id).single()).data.credits;
+  check("sweeper fails and refunds a stuck video, leaves a fresh one", s1row.status === "failed" && s1row.refunded && s2row.status === "queued" && bAfter === 84, `credits=${bAfter}`);
   // storage: A cannot upload into B's folder
   const blob = new Blob([new Uint8Array([137,80,78,71])], { type: "image/png" });
   const s1 = await A.c.storage.from("inputs").upload(`${A.id}/t.png`, blob);
