@@ -1,0 +1,10 @@
+.DS_Store
+node_modules/
+.env*
+!.env.example
+.next/
+.vercel/
+.claude/hooks/capture-errors.log
+.claude/settings.local.json
+.claude/redact.local
+__pycache__/
