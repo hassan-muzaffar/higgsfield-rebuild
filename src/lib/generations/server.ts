@@ -36,6 +36,7 @@ type NewJobs = {
   costEach: number;
   count: number;
   parentId?: string;
+  presetId?: string;
 };
 
 /** Charges credits and creates queued jobs in one transaction. */
@@ -66,6 +67,22 @@ async function createJobs(input: NewJobs): Promise<Generation[]> {
     if (!parent) parentId = null;
   }
 
+  // A preset wraps the user's prompt in its template; it must be one for this medium.
+  let finalPrompt = input.prompt;
+  let presetId: string | null = null;
+  if (input.presetId) {
+    const { data: preset } = await admin
+      .from("presets")
+      .select("id, kind, prompt_template")
+      .eq("id", input.presetId)
+      .maybeSingle<{ id: string; kind: GenerationKind; prompt_template: string }>();
+    if (!preset || preset.kind !== input.kind) {
+      throw new GenerationRequestError("That preset isn't available for this. Please pick another.", 400);
+    }
+    finalPrompt = preset.prompt_template.replaceAll("{prompt}", input.prompt);
+    presetId = preset.id;
+  }
+
   const { data, error } = await admin.rpc("create_generations", {
     p_user_id: input.userId,
     p_count: input.count,
@@ -73,8 +90,8 @@ async function createJobs(input: NewJobs): Promise<Generation[]> {
     p_mode: input.mode,
     p_model: input.model,
     p_prompt: input.prompt,
-    p_final_prompt: input.prompt,
-    p_preset_id: null,
+    p_final_prompt: finalPrompt,
+    p_preset_id: presetId,
     p_params: input.params,
     p_input_paths: input.inputPath ? [input.inputPath] : [],
     p_cost_each: input.costEach,
@@ -100,8 +117,10 @@ export function createImageJobs(input: {
   count: number;
   referencePath?: string;
   parentId?: string;
+  presetId?: string;
 }) {
   return createJobs({
+    presetId: input.presetId,
     userId: input.userId,
     kind: "image",
     mode: input.referencePath ? "edit" : "text",
@@ -122,8 +141,10 @@ export function createVideoJob(input: {
   durationSeconds: VideoDuration;
   startFramePath?: string;
   parentId?: string;
+  presetId?: string;
 }) {
   return createJobs({
+    presetId: input.presetId,
     userId: input.userId,
     kind: "video",
     mode: input.startFramePath ? "image_to_video" : "text",

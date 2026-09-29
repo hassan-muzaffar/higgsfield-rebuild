@@ -14,6 +14,8 @@ export type Draft = {
   prompt: string;
   /** The generation this one builds on. */
   parentId?: string;
+  /** Style or camera-move preset to preselect. */
+  presetId?: string;
   /** An image already in the user's inputs bucket, with a signed preview URL. */
   reference?: { path: string; previewUrl: string };
   image?: { aspectRatio?: ImageAspectRatio; count?: number };

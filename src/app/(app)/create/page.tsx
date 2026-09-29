@@ -4,7 +4,7 @@ import { Studio } from "@/components/studio/studio";
 import { getProfile } from "@/lib/profile";
 import { createClient } from "@/lib/supabase/server";
 import { DRAFT_ACTIONS, prepareDraft } from "@/lib/generations/drafts";
-import { GENERATION_COLUMNS, type Generation } from "@/lib/generations/types";
+import { GENERATION_COLUMNS, PRESET_COLUMNS, type Generation, type Preset } from "@/lib/generations/types";
 
 export const metadata: Metadata = { title: "Create" };
 
@@ -24,7 +24,7 @@ export default async function CreatePage(props: PageProps<"/create">) {
     : null;
 
   const supabase = await createClient();
-  const [{ data: generations }, { data: favorites }] = await Promise.all([
+  const [{ data: generations }, { data: favorites }, { data: presets }] = await Promise.all([
     supabase
       .from("generations")
       .select(GENERATION_COLUMNS)
@@ -32,6 +32,7 @@ export default async function CreatePage(props: PageProps<"/create">) {
       .limit(40)
       .returns<Generation[]>(),
     supabase.from("favorites").select("generation_id"),
+    supabase.from("presets").select(PRESET_COLUMNS).order("sort").returns<Preset[]>(),
   ]);
 
   return (
@@ -43,6 +44,7 @@ export default async function CreatePage(props: PageProps<"/create">) {
       initialGenerations={generations ?? []}
       initialFavoriteIds={(favorites ?? []).map((f) => f.generation_id)}
       draft={draft ?? undefined}
+      presets={presets ?? []}
     />
   );
 }

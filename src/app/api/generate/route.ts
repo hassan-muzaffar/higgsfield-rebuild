@@ -35,6 +35,7 @@ const generateRequest = z.discriminatedUnion("kind", [
     count: z.number().int().min(1).max(MAX_IMAGES_PER_REQUEST),
     referencePath: inputPath,
     parentId: z.uuid().optional(),
+    presetId: z.uuid().optional(),
   }),
   z.object({
     kind: z.literal("video"),
@@ -43,6 +44,7 @@ const generateRequest = z.discriminatedUnion("kind", [
     durationSeconds: z.union(VIDEO_DURATIONS.map((d) => z.literal(d))),
     startFramePath: inputPath,
     parentId: z.uuid().optional(),
+    presetId: z.uuid().optional(),
   }),
   z.object({
     kind: z.literal("voice"),

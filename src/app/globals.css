@@ -148,3 +148,45 @@
     background-position: -200% 0;
   }
 }
+
+/* Camera-move previews for video presets: each animates the sample still the way the camera would move. */
+.camera-move {
+  transform-origin: center;
+  will-change: transform;
+}
+.group:hover .camera-move,
+.group:focus-visible .camera-move {
+  animation-duration: 2.8s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+.group:hover .camera-dolly-in, .group:focus-visible .camera-dolly-in { animation-name: camera-dolly-in; }
+.group:hover .camera-orbit, .group:focus-visible .camera-orbit { animation-name: camera-orbit; }
+.group:hover .camera-crane-up, .group:focus-visible .camera-crane-up { animation-name: camera-crane-up; }
+.group:hover .camera-fpv, .group:focus-visible .camera-fpv { animation-name: camera-fpv; animation-duration: 1.6s; }
+.group:hover .camera-handheld, .group:focus-visible .camera-handheld { animation-name: camera-handheld; animation-duration: 0.9s; }
+.group:hover .camera-tracking, .group:focus-visible .camera-tracking { animation-name: camera-tracking; }
+.group:hover .camera-pan, .group:focus-visible .camera-pan { animation-name: camera-pan; animation-duration: 3.6s; }
+.group:hover .camera-pull-out, .group:focus-visible .camera-pull-out { animation-name: camera-pull-out; }
+
+@keyframes camera-dolly-in { from { transform: scale(1); } to { transform: scale(1.35); } }
+@keyframes camera-pull-out { from { transform: scale(1.4); } to { transform: scale(1); } }
+@keyframes camera-crane-up { from { transform: scale(1.3) translateY(12%); } to { transform: scale(1.3) translateY(-12%); } }
+@keyframes camera-tracking { from { transform: scale(1.25) translateX(-9%); } to { transform: scale(1.25) translateX(9%); } }
+@keyframes camera-pan { from { transform: scale(1.35) translateX(12%); } to { transform: scale(1.35) translateX(-12%); } }
+@keyframes camera-orbit {
+  from { transform: perspective(600px) scale(1.3) translateX(-8%) rotateY(-12deg); }
+  to { transform: perspective(600px) scale(1.3) translateX(8%) rotateY(12deg); }
+}
+@keyframes camera-fpv {
+  from { transform: scale(1.1) translate(-4%, 4%) rotate(-4deg); }
+  to { transform: scale(1.5) translate(4%, -3%) rotate(3deg); }
+}
+@keyframes camera-handheld {
+  0% { transform: scale(1.12) translate(0, 0) rotate(0deg); }
+  25% { transform: scale(1.12) translate(-1.2%, 0.8%) rotate(-0.4deg); }
+  50% { transform: scale(1.12) translate(0.8%, -0.6%) rotate(0.3deg); }
+  75% { transform: scale(1.12) translate(-0.5%, -1%) rotate(-0.2deg); }
+  100% { transform: scale(1.12) translate(1%, 0.5%) rotate(0.4deg); }
+}

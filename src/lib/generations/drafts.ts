@@ -90,6 +90,7 @@ export async function prepareDraft(action: DraftAction, sourceId: string, userId
         mode: "image",
         prompt: source.prompt,
         reference,
+        presetId: source.preset_id ?? undefined,
         image: { aspectRatio: pick<ImageAspectRatio>(aspectRatio, IMAGE_ASPECT_RATIOS, "1:1") },
       };
     case "video":
@@ -98,6 +99,7 @@ export async function prepareDraft(action: DraftAction, sourceId: string, userId
         mode: "video",
         prompt: source.prompt,
         reference,
+        presetId: source.preset_id ?? undefined,
         video: {
           aspectRatio: aspectRatio === "9:16" ? "9:16" : "16:9",
           durationSeconds: pick<VideoDuration>(source.params.durationSeconds, VIDEO_DURATIONS, 8),

@@ -13,7 +13,9 @@
     "test:video": "node --env-file=.env.local scripts/test-video.mjs",
     "voices:samples": "node --env-file=.env.local scripts/generate-voice-samples.mjs",
     "test:voice": "node --env-file=.env.local scripts/test-voice.mjs",
-    "test:library": "node --env-file=.env.local scripts/test-library.mjs"
+    "test:library": "node --env-file=.env.local scripts/test-library.mjs",
+    "presets:thumbnails": "node --env-file=.env.local scripts/generate-preset-thumbnails.mjs",
+    "test:presets": "node --env-file=.env.local scripts/test-presets.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.24.0",

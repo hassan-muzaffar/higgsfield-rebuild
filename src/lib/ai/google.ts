@@ -21,6 +21,36 @@ export class ProviderError extends Error {
   }
 }
 
+const ENHANCE_INSTRUCTIONS = {
+  image:
+    "Rewrite the user's idea as one vivid prompt for an AI image generator. Keep their subject and intent. " +
+    "Add concrete detail: subject, setting, composition, lighting, colour, mood and style. 40 to 70 words.",
+  video:
+    "Rewrite the user's idea as one prompt for an AI video generator making a short clip. Keep their subject and intent. " +
+    "Describe the subject, the action as it unfolds, the setting, camera movement, lighting, mood and ambient sound. 40 to 80 words.",
+  voice:
+    "Polish the user's text into a natural, engaging voiceover script to be read aloud. Keep their meaning, language " +
+    "and roughly their length. Fix grammar, improve rhythm and flow. No stage directions, labels or quotation marks.",
+} as const;
+
+/** Rewrites a short prompt into a detailed one for the given medium. */
+export async function enhancePrompt(prompt: string, kind: keyof typeof ENHANCE_INSTRUCTIONS) {
+  try {
+    const interaction = await google().interactions.create({
+      model: MODELS.enhance,
+      system_instruction: `${ENHANCE_INSTRUCTIONS[kind]} Reply with the rewritten text only.`,
+      input: prompt,
+      store: false,
+    });
+    const text = interaction.output_text?.trim().replace(/^["“]|["”]$/g, "");
+    if (!text) throw new Error(`no text (${interaction.status})`);
+    return text;
+  } catch (error) {
+    if (error instanceof ProviderError) throw error;
+    throw new ProviderError("Couldn't enhance the prompt right now. Please try again.", String(error));
+  }
+}
+
 type ImageRequest = {
   prompt: string;
   aspectRatio: string;

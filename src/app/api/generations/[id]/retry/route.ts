@@ -62,6 +62,7 @@ export async function POST(_request: Request, ctx: RouteContext<"/api/generation
         aspectRatio: pick<ImageAspectRatio>(failed.params.aspectRatio, IMAGE_ASPECT_RATIOS, "1:1"),
         count: 1,
         referencePath: failed.input_paths[0],
+        presetId: failed.preset_id ?? undefined,
       });
     } else if (failed.kind === "voice") {
       job = await createVoiceJob({
@@ -75,6 +76,7 @@ export async function POST(_request: Request, ctx: RouteContext<"/api/generation
         aspectRatio: pick<VideoAspectRatio>(failed.params.aspectRatio, VIDEO_ASPECT_RATIOS, "16:9"),
         durationSeconds: pick<VideoDuration>(failed.params.durationSeconds, VIDEO_DURATIONS, 8),
         startFramePath: failed.input_paths[0],
+        presetId: failed.preset_id ?? undefined,
       });
     }
 

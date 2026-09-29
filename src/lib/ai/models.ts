@@ -7,4 +7,6 @@ export const MODELS = {
   // OpenAI's newest TTS model; supports speaking-style instructions.
   voice: "gpt-4o-mini-tts",
   transcribe: "gpt-transcribe",
+  // Fastest, cheapest current Gemini text model: rewrites short prompts.
+  enhance: "gemini-3.5-flash-lite",
 } as const;

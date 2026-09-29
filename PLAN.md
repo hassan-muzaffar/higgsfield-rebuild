@@ -57,7 +57,7 @@ Lip-sync, merging a voiceover into a video, upscaling, teams/workspaces, a model
 | Images | Google Gemini image model ("Nano Banana" family): text-to-image and image editing |
 | Video | Google Veo 3.1 Fast (`veo-3.1-fast-generate-preview`): text-to-video and image-to-video, 720p, with native audio |
 | Voice | OpenAI `gpt-4o-mini-tts` (voiceover, with speaking-style instructions) and `gpt-transcribe` (dictation) |
-| Prompt enhance | Google Gemini text model (fast tier) |
+| Prompt enhance | Google `gemini-3.5-flash-lite` (fastest current Gemini text model) |
 | Payments | Stripe Checkout (one-off credit packs) and webhooks. Test mode for the demo |
 | Hosting | Vercel (the stale-job sweeper runs in Supabase with pg_cron, so it works on the free Hobby plan) |
 
@@ -223,7 +223,7 @@ Each item must pass on the deployed app. The format is **Given / When / Then**, 
 ### F8 Presets
 - [ ] AC8.1 The Image tab shows at least 8 **style presets** (for example Cinematic, Anime, Product shot, Film noir) as thumbnail cards. The Video tab shows at least 8 **camera-move presets** (for example Dolly in, Orbit, Crane up, FPV, Handheld).
 - [ ] AC8.2 Picking a preset shows it as a removable chip in the prompt bar. Generating applies the preset's template to the prompt, and `final_prompt` is saved on the generation.
-- [ ] AC8.3 Video preset thumbnails are short looping clips that play on hover.
+- [ ] AC8.3 Video (camera-move) presets show an animated preview of the move on a sample still, playing on hover or keyboard focus. (Changed from real Veo clips to save ~$5 of generation cost; image styles use real generated thumbnails.)
 - [ ] AC8.4 Presets come from the `presets` table, not hard-coded in the UI.
 
 ### F9 Prompt enhance

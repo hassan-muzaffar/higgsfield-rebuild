@@ -35,3 +35,15 @@ export type Generation = {
 
 export const GENERATION_COLUMNS =
   "id, user_id, kind, mode, model, prompt, final_prompt, preset_id, params, input_paths, output_paths, status, provider_op_id, error, cost, refunded, is_public, share_slug, parent_id, created_at, completed_at";
+
+/** A style (image) or camera-move (video) preset. */
+export type Preset = {
+  id: string;
+  kind: "image" | "video";
+  slug: string;
+  name: string;
+  description: string | null;
+  thumbnail_path: string | null;
+};
+
+export const PRESET_COLUMNS = "id, kind, slug, name, description, thumbnail_path";

@@ -12,7 +12,7 @@ import { PromptBar, type Submission } from "@/components/studio/prompt-bar";
 import { useSignedUrls } from "@/components/studio/use-signed-urls";
 import { adjustCredits, useCredits } from "@/lib/credits-store";
 import { imageCost, videoCost, voiceCost } from "@/lib/generations/config";
-import type { Generation, GenerationMode } from "@/lib/generations/types";
+import type { Generation, GenerationMode, Preset } from "@/lib/generations/types";
 import { createClient } from "@/lib/supabase/client";
 import { subscribeAsUser } from "@/lib/supabase/realtime";
 
@@ -28,6 +28,7 @@ type Props = {
   initialGenerations: Generation[];
   initialFavoriteIds: string[];
   draft?: Draft;
+  presets: Preset[];
 };
 
 /** What a submission will create and cost, for placeholder cards and the optimistic balance. */
@@ -61,7 +62,7 @@ function sortNewestFirst(list: Generation[]) {
   return [...list].sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
-export function Studio({ userId, initialCredits, initialGenerations, initialFavoriteIds, draft }: Props) {
+export function Studio({ userId, initialCredits, initialGenerations, initialFavoriteIds, draft, presets }: Props) {
   const credits = useCredits(initialCredits);
   const [items, setItems] = useState<Generation[]>(initialGenerations);
   const [prompt, setPrompt] = useState(draft?.prompt ?? "");
@@ -262,6 +263,7 @@ export function Studio({ userId, initialCredits, initialGenerations, initialFavo
           onPromptChange={setPrompt}
           onSubmit={generate}
           draft={draft}
+          presets={presets}
         />
       </div>
 

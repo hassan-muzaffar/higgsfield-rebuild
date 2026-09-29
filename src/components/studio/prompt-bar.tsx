@@ -11,10 +11,14 @@ import {
   ImagePlusIcon,
   Loader2Icon,
   PlayIcon,
+  SparklesIcon,
   SquareIcon,
+  Undo2Icon,
   XIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import { DictationButton } from "@/components/studio/dictation-button";
+import { PresetPicker } from "@/components/studio/preset-picker";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -48,17 +52,26 @@ import {
   type VideoDuration,
 } from "@/lib/generations/config";
 import type { Draft } from "@/lib/generations/draft-types";
+import type { Preset } from "@/lib/generations/types";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 export type Submission = { parentId?: string } & (
-  | { kind: "image"; prompt: string; aspectRatio: ImageAspectRatio; count: number; referencePath?: string }
+  | {
+      kind: "image";
+      prompt: string;
+      aspectRatio: ImageAspectRatio;
+      count: number;
+      referencePath?: string;
+      presetId?: string;
+    }
   | {
       kind: "video";
       prompt: string;
       aspectRatio: VideoAspectRatio;
       durationSeconds: VideoDuration;
       startFramePath?: string;
+      presetId?: string;
     }
   | { kind: "voice"; prompt: string; voice: VoiceId; style: VoiceStyleId }
 );
@@ -75,6 +88,7 @@ type Props = {
   onSubmit: (submission: Submission) => void;
   /** Initial settings from "Reuse", "Animate this", "Edit this" or "Add voiceover". */
   draft?: Draft;
+  presets: Preset[];
 };
 
 const TABS = [
@@ -83,7 +97,19 @@ const TABS = [
   { id: "voice", label: "Voice", icon: AudioLinesIcon, ready: true },
 ] as const;
 
-export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit, draft }: Props) {
+export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit, draft, presets }: Props) {
+  const draftPreset = presets.find((p) => p.id === draft?.presetId);
+  const [imagePreset, setImagePreset] = useState<string | null>(draftPreset?.kind === "image" ? draftPreset.id : null);
+  const [videoPreset, setVideoPreset] = useState<string | null>(draftPreset?.kind === "video" ? draftPreset.id : null);
+  const [enhancing, setEnhancing] = useState(false);
+  // The prompt before the last enhance, while the enhanced text is still untouched.
+  const [undoPrompt, setUndoPrompt] = useState<string | null>(null);
+  const [enhancedPrompt, setEnhancedPrompt] = useState<string | null>(null);
+  if (undoPrompt !== null && prompt !== enhancedPrompt) {
+    // The user edited the enhanced prompt, so Undo would throw their edits away: hide it.
+    setUndoPrompt(null);
+    setEnhancedPrompt(null);
+  }
   const [mode, setMode] = useState<Mode>(draft?.mode ?? "image");
   const [imageRatio, setImageRatio] = useState<ImageAspectRatio>(draft?.image?.aspectRatio ?? "1:1");
   const [videoRatio, setVideoRatio] = useState<VideoAspectRatio>(draft?.video?.aspectRatio ?? "16:9");
@@ -170,9 +196,53 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit, d
       mode === "voice"
         ? { kind: "voice", prompt: text, voice, style, parentId }
         : mode === "video"
-          ? { kind: "video", prompt: text, aspectRatio: videoRatio, durationSeconds: duration, startFramePath: path, parentId }
-          : { kind: "image", prompt: text, aspectRatio: imageRatio, count, referencePath: path, parentId },
+          ? {
+              kind: "video",
+              prompt: text,
+              aspectRatio: videoRatio,
+              durationSeconds: duration,
+              startFramePath: path,
+              parentId,
+              presetId: videoPreset ?? undefined,
+            }
+          : {
+              kind: "image",
+              prompt: text,
+              aspectRatio: imageRatio,
+              count,
+              referencePath: path,
+              parentId,
+              presetId: imagePreset ?? undefined,
+            },
     );
+  }
+
+  async function enhance() {
+    const original = prompt;
+    setEnhancing(true);
+    try {
+      const res = await fetch("/api/enhance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: mode, prompt: original }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? "Couldn't enhance the prompt. Please try again.");
+      onPromptChange(body.prompt);
+      setEnhancedPrompt(body.prompt);
+      setUndoPrompt(original);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't enhance the prompt.");
+    } finally {
+      setEnhancing(false);
+    }
+  }
+
+  function undoEnhance() {
+    if (undoPrompt === null) return;
+    onPromptChange(undoPrompt);
+    setUndoPrompt(null);
+    setEnhancedPrompt(null);
   }
 
   return (
@@ -274,21 +344,45 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit, d
         />
         <DictationButton onText={insertAtCursor} />
 
-        {mode !== "voice" && (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="secondary"
               size="icon-sm"
-              aria-label={mode === "video" ? "Add a start frame to animate" : "Add a reference image to edit"}
-              onClick={() => fileInput.current?.click()}
+              aria-label={mode === "voice" ? "Polish the script" : "Enhance the prompt"}
+              disabled={!prompt.trim() || enhancing}
+              onClick={enhance}
             >
-              <ImagePlusIcon aria-hidden="true" />
+              {enhancing ? <Loader2Icon className="animate-spin" aria-hidden="true" /> : <SparklesIcon aria-hidden="true" />}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{mode === "video" ? "Animate an image" : "Add an image to edit"}</TooltipContent>
+          <TooltipContent>{mode === "voice" ? "Polish the script" : "Enhance the prompt"}</TooltipContent>
         </Tooltip>
+        {undoPrompt !== null && (
+          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={undoEnhance}>
+            <Undo2Icon aria-hidden="true" />
+            Undo
+          </Button>
         )}
+
+        {mode !== "voice" && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="secondary"
+                size="icon-sm"
+                aria-label={mode === "video" ? "Add a start frame to animate" : "Add a reference image to edit"}
+                onClick={() => fileInput.current?.click()}
+              >
+                <ImagePlusIcon aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{mode === "video" ? "Animate an image" : "Add an image to edit"}</TooltipContent>
+          </Tooltip>
+        )}
+
+        {mode === "image" && <PresetPicker kind="image" presets={presets} value={imagePreset} onChange={setImagePreset} />}
+        {mode === "video" && <PresetPicker kind="video" presets={presets} value={videoPreset} onChange={setVideoPreset} />}
 
         {mode === "voice" ? (
           <>
