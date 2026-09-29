@@ -126,6 +126,7 @@ Supabase Realtime → pushes each row change to the studio and library
 |---|---|
 | `/` | Landing page |
 | `/pricing` | Credit packs (public) |
+| `/privacy`, `/terms` | Privacy policy and terms (public; required for publishing Google sign-in) |
 | `/login`, `/auth/callback` | Auth |
 | `/create` | Studio (main app screen) |
 | `/library` | The user's own generations |
@@ -182,6 +183,7 @@ Each item must pass on the deployed app. The format is **Given / When / Then**, 
 - [ ] AC2.3 A signed-out user who visits `/create`, `/library` or `/billing` is redirected to `/login` and returned to the page they asked for after signing in.
 - [ ] AC2.4 The header shows the user's avatar, with a menu containing Billing and Sign out. Signing out returns to `/`.
 - [ ] AC2.5 An invalid or expired magic link shows a friendly error with a button to resend it.
+- [ ] AC2.6 Public `/privacy` and `/terms` pages exist, and the Google sign-in app is **published** (In production), so any Google account can sign in, not just listed test users.
 
 ### F3 Studio shell & prompt bar
 - [ ] AC3.1 `/create` shows a results feed with a prompt bar fixed at the bottom, which has **Image / Video / Voice** tabs.
@@ -293,7 +295,7 @@ Each milestone ends deployed and demoable.
 
 | # | Milestone | Features | Exit check |
 |---|---|---|---|
-| M1 | Foundations | Scaffold, theme, Supabase schema + RLS + credit functions, F2, app shell | Sign in and see 50 credits |
+| M1 | Foundations | Scaffold, theme, Supabase schema + RLS + credit functions, F2, app shell, `/privacy` + `/terms`, Vercel deploy, publish Google sign-in | Sign in and see 50 credits |
 | M2 | Image pipeline | Job system, F3, F4 | AC3.x, AC4.x pass |
 | M3 | Video | F5, sweeper cron | AC5.x pass, including refreshing mid-job |
 | M4 | Voice | F6, F7 | AC6.x, AC7.x pass |
