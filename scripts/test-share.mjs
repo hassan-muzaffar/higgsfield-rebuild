@@ -7,7 +7,7 @@ const { createServerClient } = require("@supabase/ssr");
 
 const URL_ = process.env.NEXT_PUBLIC_SUPABASE_URL, ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const admin = createClient(URL_, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
-const APP = "http://localhost:3000";
+const APP = process.env.APP_URL ?? "http://localhost:3000"; // APP_URL=https://… to test a deployment
 let pass = 0, fail = 0;
 const check = (n, ok, x = "") => { if (ok) pass++; else fail++; console.log(`${ok ? "PASS" : "FAIL"}  ${n}${x ? "  — " + x : ""}`); };
 const users = [];

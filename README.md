@@ -78,7 +78,7 @@ End-to-end scripts drive the real app as signed-in users against the real databa
 | `pnpm test:video` | 8: a real 4s Veo clip end to end | ~$0.60 |
 | `pnpm showcase` | 9: 6 images → Animate this → image-to-video (also makes the landing samples) | ~$1.15 |
 
-Plus `pnpm lint`, `pnpm typecheck` and `pnpm build`.
+Plus `pnpm lint`, `pnpm typecheck` and `pnpm build`. Set `APP_URL=https://…` to run the suites against a deployment instead of `pnpm dev` (`test:billing`'s webhook checks sign with the local secret, so run those locally).
 
 ## Deploying (Vercel)
 

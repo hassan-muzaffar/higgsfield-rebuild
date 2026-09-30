@@ -10,7 +10,7 @@ const URL_ = process.env.NEXT_PUBLIC_SUPABASE_URL, ANON = process.env.NEXT_PUBLI
 const admin = createClient(URL_, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const SECRET = process.env.STRIPE_WEBHOOK_SECRET;
-const APP = "http://localhost:3000";
+const APP = process.env.APP_URL ?? "http://localhost:3000"; // APP_URL=https://… to test a deployment
 let pass = 0, fail = 0;
 const check = (n, ok, x = "") => { if (ok) pass++; else fail++; console.log(`${ok ? "PASS" : "FAIL"}  ${n}${x ? "  — " + x : ""}`); };
 const users = [], customers = [];
