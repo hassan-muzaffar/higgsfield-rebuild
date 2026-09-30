@@ -11,9 +11,10 @@ export async function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4 sm:gap-6">
-        <Logo />
-        <MainNav />
+      {/* On phones the nav drops to its own row so nothing overflows at 375px. */}
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 px-4 sm:h-14 sm:flex-nowrap sm:gap-x-6">
+        <Logo className="h-14" />
+        <MainNav className="order-last -mx-1 w-full pb-2 sm:order-none sm:mx-0 sm:w-auto sm:pb-0" />
         <div className="ml-auto flex items-center gap-2">
           {profile ? (
             <>

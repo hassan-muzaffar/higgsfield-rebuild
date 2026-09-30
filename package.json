@@ -17,7 +17,8 @@
     "presets:thumbnails": "node --env-file=.env.local scripts/generate-preset-thumbnails.mjs",
     "test:presets": "node --env-file=.env.local scripts/test-presets.mjs",
     "test:billing": "node --env-file=.env.local scripts/test-billing.mjs",
-    "test:share": "node --env-file=.env.local scripts/test-share.mjs"
+    "test:share": "node --env-file=.env.local scripts/test-share.mjs",
+    "showcase": "node --env-file=.env.local scripts/generate-showcase.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.24.0",

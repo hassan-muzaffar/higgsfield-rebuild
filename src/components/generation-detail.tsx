@@ -16,10 +16,12 @@ import {
   Share2Icon,
   Loader2Icon,
   RotateCcwIcon,
+  ScanSearchIcon,
   Trash2Icon,
   WandSparklesIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { COMING_SOON, ComingSoonButton } from "@/components/coming-soon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -223,6 +225,12 @@ export function GenerationDetail({
                     <RotateCcwIcon aria-hidden="true" />
                     Reuse
                   </Button>
+                  {g.kind === "image" && (
+                    <ComingSoonButton icon={ScanSearchIcon} label="Upscale" reason={COMING_SOON.upscale} />
+                  )}
+                  {g.kind === "video" && (
+                    <ComingSoonButton icon={AudioLinesIcon} label="Voiceover on video" reason={COMING_SOON.mergeVoiceover} />
+                  )}
                 </div>
 
                 <Separator />

@@ -237,10 +237,12 @@ export function Studio({ userId, initialCredits, initialGenerations, initialFavo
           </div>
         </div>
       ) : (
-        <section aria-label="Your creations" className="grid grid-cols-2 items-start gap-3 md:grid-cols-3 xl:grid-cols-4">
+        // Masonry, like the library: mixed aspect ratios pack without gaps; the newest stays top-left.
+        <section aria-label="Your creations" className="columns-2 gap-3 md:columns-3 xl:columns-4">
           {items.map((g) => (
             <GenerationCard
               key={g.id}
+              className="mb-3 break-inside-avoid"
               generation={g}
               mediaUrl={g.output_paths[0] ? urls[g.output_paths[0]] : undefined}
               onRetry={retry}

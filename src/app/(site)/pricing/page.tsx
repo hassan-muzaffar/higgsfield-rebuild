@@ -28,9 +28,10 @@ export default async function PricingPage() {
         </p>
       </div>
 
-      <div className="mt-12">
+      <section aria-labelledby="packs-heading" className="mt-12">
+        <h2 id="packs-heading" className="sr-only">Credit packs</h2>
         <PackCards signedIn={signedIn} />
-      </div>
+      </section>
 
       <section aria-labelledby="costs-heading" className="mx-auto mt-16 max-w-2xl">
         <h2 id="costs-heading" className="text-lg font-semibold">What things cost</h2>

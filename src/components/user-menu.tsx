@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { CreditCardIcon, LogOutIcon } from "lucide-react";
+import { CreditCardIcon, LogOutIcon, UsersIcon } from "lucide-react";
 import { signOut } from "@/app/actions/auth";
+import { COMING_SOON, SoonBadge } from "@/components/coming-soon";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -38,6 +39,12 @@ export function UserMenu({ name, avatarUrl }: Props) {
             Billing
           </Link>
         </DropdownMenuItem>
+        <DropdownMenuItem disabled title={COMING_SOON.teams}>
+          <UsersIcon aria-hidden="true" />
+          Teams
+          <SoonBadge className="ml-auto" />
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => signOut()}>
           <LogOutIcon aria-hidden="true" />
           Sign out

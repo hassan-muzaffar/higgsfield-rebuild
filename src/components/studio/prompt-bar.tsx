@@ -11,12 +11,14 @@ import {
   ImagePlusIcon,
   Loader2Icon,
   PlayIcon,
+  SmileIcon,
   SparklesIcon,
   SquareIcon,
   Undo2Icon,
   XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { COMING_SOON, SoonBadge } from "@/components/coming-soon";
 import { DictationButton } from "@/components/studio/dictation-button";
 import { PresetPicker } from "@/components/studio/preset-picker";
 import { Button } from "@/components/ui/button";
@@ -95,6 +97,7 @@ const TABS = [
   { id: "image", label: "Image", icon: ImageIcon, ready: true },
   { id: "video", label: "Video", icon: ClapperboardIcon, ready: true },
   { id: "voice", label: "Voice", icon: AudioLinesIcon, ready: true },
+  { id: "lipsync", label: "Lip-sync", icon: SmileIcon, ready: false },
 ] as const;
 
 export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit, draft, presets }: Props) {
@@ -247,7 +250,12 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit, d
 
   return (
     <div className="rounded-2xl border bg-popover/95 shadow-2xl shadow-black/50 backdrop-blur-md">
-      <div className="flex items-center gap-1 border-b px-2 pt-2" role="tablist" aria-label="What to create">
+      {/* Scrolls sideways within itself on very narrow screens instead of widening the page. */}
+      <div
+        className="flex items-center gap-0.5 overflow-x-auto border-b px-1.5 pt-2 [scrollbar-width:none] sm:gap-1 sm:px-2"
+        role="tablist"
+        aria-label="What to create"
+      >
         {TABS.map(({ id, label, icon: Icon, ready }) => {
           const tab = (
             <button
@@ -257,13 +265,14 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit, d
               aria-disabled={!ready}
               onClick={() => ready && switchMode(id as Mode)}
               className={cn(
-                "flex items-center gap-1.5 rounded-t-lg border-b-2 px-3 pt-1 pb-2 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-ring",
+                "flex shrink-0 items-center gap-1.5 rounded-t-lg border-b-2 px-2 pt-1 pb-2 text-sm whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-ring sm:px-3",
                 id === mode ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
                 !ready && "cursor-not-allowed opacity-50",
               )}
             >
               <Icon className="size-4" aria-hidden="true" />
               {label}
+              {!ready && <SoonBadge />}
             </button>
           );
           return ready ? (
@@ -271,7 +280,7 @@ export function PromptBar({ userId, credits, prompt, onPromptChange, onSubmit, d
           ) : (
             <Tooltip key={id}>
               <TooltipTrigger asChild>{tab}</TooltipTrigger>
-              <TooltipContent>Coming in the next update</TooltipContent>
+              <TooltipContent className="max-w-60">{COMING_SOON.lipsync}</TooltipContent>
             </Tooltip>
           );
         })}

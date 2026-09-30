@@ -10,11 +10,11 @@ const LINKS = [
   { href: "/explore", label: "Explore" },
 ];
 
-export function MainNav() {
+export function MainNav({ className }: { className?: string }) {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Main" className="flex items-center gap-1 text-sm">
+    <nav aria-label="Main" className={cn("flex items-center gap-1 text-sm", className)}>
       {LINKS.map(({ href, label }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
