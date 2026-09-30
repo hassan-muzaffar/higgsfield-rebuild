@@ -275,6 +275,7 @@ export function Studio({ userId, initialCredits, initialGenerations, initialFavo
         isFavorite={favorites.isFavorite}
         onToggleFavorite={(g) => favorites.toggle(g.id)}
         onDeleted={(id) => remove([id])}
+        onUpdated={(id, changes) => setItems((prev) => prev.map((g) => (g.id === id ? { ...g, ...changes } : g)))}
       />
     </div>
   );

@@ -13,6 +13,7 @@ import {
 } from "@/lib/generations/config";
 import { GENERATION_COLUMNS, type Generation } from "@/lib/generations/types";
 import type { Draft } from "@/lib/generations/draft-types";
+import { getPublicGeneration } from "@/lib/generations/public";
 
 export const DRAFT_ACTIONS = ["reuse", "animate", "edit", "voiceover"] as const;
 export type DraftAction = (typeof DRAFT_ACTIONS)[number];
@@ -83,13 +84,27 @@ export async function prepareDraft(action: DraftAction, sourceId: string, userId
     const previewUrl = await signInput(source.input_paths[0]);
     if (previewUrl) reference = { path: source.input_paths[0], previewUrl };
   }
+  return { ...sameSettings(nonce, source), reference };
+}
+
+/** "Try this prompt" from a shared item: its prompt, preset and settings, but never the creator's files. */
+export async function prepareTryDraft(slug: string): Promise<Draft | null> {
+  const shared = await getPublicGeneration(slug);
+  if (!shared) return null;
+  return sameSettings(`try:${slug}:${Date.now()}`, shared);
+}
+
+function sameSettings(
+  nonce: string,
+  source: Pick<Generation, "kind" | "prompt" | "preset_id"> & { params: Generation["params"] },
+): Draft {
+  const aspectRatio = source.params.aspectRatio;
   switch (source.kind) {
     case "image":
       return {
         nonce,
         mode: "image",
         prompt: source.prompt,
-        reference,
         presetId: source.preset_id ?? undefined,
         image: { aspectRatio: pick<ImageAspectRatio>(aspectRatio, IMAGE_ASPECT_RATIOS, "1:1") },
       };
@@ -98,7 +113,6 @@ export async function prepareDraft(action: DraftAction, sourceId: string, userId
         nonce,
         mode: "video",
         prompt: source.prompt,
-        reference,
         presetId: source.preset_id ?? undefined,
         video: {
           aspectRatio: aspectRatio === "9:16" ? "9:16" : "16:9",

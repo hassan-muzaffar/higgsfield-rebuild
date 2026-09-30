@@ -168,6 +168,7 @@ export function LibraryView({ userId, filter, initialItems, initialFavoriteIds, 
         isFavorite={favorites.isFavorite}
         onToggleFavorite={toggleFavorite}
         onDeleted={(id) => setItems((prev) => prev.filter((g) => g.id !== id))}
+        onUpdated={(id, changes) => setItems((prev) => prev.map((g) => (g.id === id ? { ...g, ...changes } : g)))}
       />
     </div>
   );

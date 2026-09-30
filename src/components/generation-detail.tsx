@@ -9,7 +9,11 @@ import {
   ClapperboardIcon,
   CopyIcon,
   DownloadIcon,
+  GlobeIcon,
   HeartIcon,
+  LinkIcon,
+  LockIcon,
+  Share2Icon,
   Loader2Icon,
   RotateCcwIcon,
   Trash2Icon,
@@ -43,17 +47,29 @@ type Props = {
   isFavorite: (id: string) => boolean;
   onToggleFavorite: (g: Generation) => void;
   onDeleted: (id: string) => void;
+  /** Called when sharing changes, so the list can update its copy. */
+  onUpdated: (id: string, changes: Partial<Generation>) => void;
 };
 
 const KIND_LABEL = { image: "Image", video: "Video", voice: "Voiceover" } as const;
 const MODE_LABEL = { text: "From text", edit: "Edited image", image_to_video: "Animated image", tts: "Text to speech" } as const;
 
-export function GenerationDetail({ items, openId, onOpenIdChange, urls, isFavorite, onToggleFavorite, onDeleted }: Props) {
+export function GenerationDetail({
+  items,
+  openId,
+  onOpenIdChange,
+  urls,
+  isFavorite,
+  onToggleFavorite,
+  onDeleted,
+  onUpdated,
+}: Props) {
   const router = useRouter();
   const index = items.findIndex((g) => g.id === openId);
   const g = index >= 0 ? items[index] : null;
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const prev = index > 0 ? items[index - 1] : null;
   const next = index >= 0 && index < items.length - 1 ? items[index + 1] : null;
@@ -81,6 +97,37 @@ export function GenerationDetail({ items, openId, onOpenIdChange, urls, isFavori
     if (!g) return;
     await navigator.clipboard.writeText(g.prompt);
     toast.success("Prompt copied");
+  }
+
+  async function copyLink(slug: string) {
+    const url = `${window.location.origin}/g/${slug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Share link copied");
+    } catch {
+      toast.message("Share link", { description: url });
+    }
+  }
+
+  async function setPublic(makePublic: boolean) {
+    if (!g) return;
+    setSharing(true);
+    try {
+      const res = await fetch(`/api/generations/${g.id}/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ public: makePublic }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? "Couldn't update sharing.");
+      onUpdated(g.id, { is_public: body.isPublic, share_slug: body.slug });
+      if (makePublic) await copyLink(body.slug);
+      else toast.success("Now private. The link no longer works.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't update sharing.");
+    } finally {
+      setSharing(false);
+    }
   }
 
   async function remove() {
@@ -188,6 +235,38 @@ export function GenerationDetail({ items, openId, onOpenIdChange, urls, isFavori
                     </div>
                   ))}
                 </dl>
+
+                <Separator />
+
+                <section aria-label="Sharing" className="flex flex-wrap items-center gap-2">
+                  {g.is_public && g.share_slug ? (
+                    <>
+                      <span className="mr-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <GlobeIcon className="size-3.5 text-primary" aria-hidden="true" />
+                        Public: anyone with the link, and in Explore
+                      </span>
+                      <Button size="sm" variant="secondary" onClick={() => copyLink(g.share_slug!)}>
+                        <LinkIcon aria-hidden="true" />
+                        Copy link
+                      </Button>
+                      <Button size="sm" variant="ghost" disabled={sharing} onClick={() => setPublic(false)}>
+                        {sharing ? <Loader2Icon className="animate-spin" aria-hidden="true" /> : <LockIcon aria-hidden="true" />}
+                        Make private
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="mr-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <LockIcon className="size-3.5" aria-hidden="true" />
+                        Private: only you can see this
+                      </span>
+                      <Button size="sm" variant="secondary" disabled={sharing} onClick={() => setPublic(true)}>
+                        {sharing ? <Loader2Icon className="animate-spin" aria-hidden="true" /> : <Share2Icon aria-hidden="true" />}
+                        Share
+                      </Button>
+                    </>
+                  )}
+                </section>
 
                 <Separator />
 

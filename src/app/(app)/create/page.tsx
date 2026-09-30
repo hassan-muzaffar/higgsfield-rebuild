@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Studio } from "@/components/studio/studio";
 import { getProfile } from "@/lib/profile";
 import { createClient } from "@/lib/supabase/server";
-import { DRAFT_ACTIONS, prepareDraft } from "@/lib/generations/drafts";
+import { DRAFT_ACTIONS, prepareDraft, prepareTryDraft } from "@/lib/generations/drafts";
 import { GENERATION_COLUMNS, PRESET_COLUMNS, type Generation, type Preset } from "@/lib/generations/types";
 
 export const metadata: Metadata = { title: "Create" };
@@ -16,12 +16,17 @@ export default async function CreatePage(props: PageProps<"/create">) {
   const searchParams = await props.searchParams;
   const action = DRAFT_ACTIONS.find((a) => typeof searchParams[a] === "string");
   // If the draft can't be prepared (e.g. the copy fails), open the studio without it rather than erroring.
-  const draft = action
-    ? await prepareDraft(action, searchParams[action] as string, profile.id).catch((error) => {
-        console.error(`[create] couldn't prepare "${action}" draft:`, error);
-        return null;
-      })
-    : null;
+  // "Try this prompt" from Explore or a share page arrives as ?try=<share slug>.
+  const trySlug = typeof searchParams.try === "string" ? searchParams.try : null;
+  const draft = await (action
+    ? prepareDraft(action, searchParams[action] as string, profile.id)
+    : trySlug
+      ? prepareTryDraft(trySlug)
+      : Promise.resolve(null)
+  ).catch((error) => {
+    console.error(`[create] couldn't prepare "${action ?? "try"}" draft:`, error);
+    return null;
+  });
 
   const supabase = await createClient();
   const [{ data: generations }, { data: favorites }, { data: presets }] = await Promise.all([
